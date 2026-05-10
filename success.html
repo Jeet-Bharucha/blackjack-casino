@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Payment Successful — Blackjack</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Cinzel:wght@400;600;700&family=Crimson+Text:ital,wght@0,400;1,400&display=swap');
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{min-height:100vh;background:#0d0500;font-family:'Cinzel',serif;color:#f0f0f0;display:flex;align-items:center;justify-content:center;}
+  body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellipse 70% 60% at 50% 40%,rgba(0,80,20,.3) 0%,transparent 70%);pointer-events:none;}
+
+  .card{
+    position:relative;z-index:1;
+    background:rgba(10,5,0,.95);
+    border:2px solid rgba(76,255,145,.3);
+    border-radius:16px;
+    padding:52px 48px 44px;
+    text-align:center;
+    max-width:460px;width:90vw;
+    box-shadow:0 0 80px rgba(76,255,145,.1),0 40px 80px rgba(0,0,0,.8);
+  }
+
+  .check{font-size:64px;margin-bottom:20px;animation:popIn .5s cubic-bezier(.2,.8,.4,1) both;}
+  @keyframes popIn{from{transform:scale(0) rotate(-20deg);opacity:0}to{transform:scale(1) rotate(0);opacity:1}}
+
+  .title{font-size:26px;font-weight:700;color:#4cff91;letter-spacing:3px;margin-bottom:8px;}
+  .sub{font-family:'Crimson Text',serif;font-size:16px;color:rgba(255,255,255,.45);margin-bottom:28px;}
+
+  .chips-added{
+    display:inline-block;
+    background:rgba(76,255,145,.08);
+    border:1px solid rgba(76,255,145,.3);
+    border-radius:10px;
+    padding:18px 32px;
+    margin-bottom:32px;
+  }
+  .chips-label{font-size:10px;letter-spacing:3px;color:rgba(76,255,145,.6);text-transform:uppercase;margin-bottom:6px;}
+  .chips-amount{font-size:42px;font-weight:700;color:#4cff91;font-family:'Playfair Display',serif;text-shadow:0 0 20px rgba(76,255,145,.4);}
+
+  .new-balance{font-size:13px;color:rgba(255,255,255,.35);font-family:'Crimson Text',serif;margin-bottom:32px;}
+  .new-balance strong{color:#ffd764;}
+
+  .btn{
+    display:inline-block;padding:14px 36px;
+    background:linear-gradient(135deg,#c9a227,#ffd764,#c9a227);
+    color:#1a0a00;border:none;border-radius:6px;
+    font-family:'Cinzel',serif;font-size:12px;font-weight:700;letter-spacing:3px;
+    cursor:pointer;text-decoration:none;
+    box-shadow:0 4px 16px rgba(201,162,39,.4);
+    transition:all .2s;
+  }
+  .btn:hover{transform:translateY(-2px);}
+
+  .redirect-note{margin-top:14px;font-size:11px;color:rgba(255,255,255,.2);font-family:'Crimson Text',serif;}
+
+  .confetti-piece{position:fixed;width:8px;height:8px;opacity:0;animation:fall 2s ease-in forwards;z-index:0;pointer-events:none;border-radius:2px;}
+  @keyframes fall{0%{opacity:1;transform:translateY(0) rotate(0)}100%{opacity:0;transform:translateY(100vh) rotate(720deg)}}
+
+  .loading-state{color:rgba(255,215,100,.4);font-family:'Crimson Text',serif;font-style:italic;}
+  .error-state{color:#ff6b6b;font-family:'Crimson Text',serif;}
+</style>
+</head>
+<body>
+<div class="card" id="card">
+  <div class="loading-state">Verifying payment...</div>
+</div>
+
+<script>
+const API = 'http://localhost:4000/api';
+const token = localStorage.getItem('bj_token');
+if (!token) window.location.href = 'index.html';
+
+const PACKAGES = {
+  starter: { chips: 500  },
+  popular: { chips: 1000 },
+  big:     { chips: 2500 },
+  mega:    { chips: 5000 },
+};
+
+const params = new URLSearchParams(location.search);
+const sessionId = params.get('session_id');
+
+async function verify() {
+  if (!sessionId) { showError('No payment session found.'); return; }
+  try {
+    const res = await fetch(`${API}/verify-payment?session_id=${encodeURIComponent(sessionId)}`, {
+      headers: { Authorization: 'Bearer ' + token }
+    });
+    const data = await res.json();
+    if (!res.ok) { showError(data.error || 'Payment verification failed.'); return; }
+    showSuccess(data.chips, data.balance);
+  } catch {
+    showError('Cannot connect to server. Your chips will appear next time you open the game.');
+  }
+}
+
+function showSuccess(chips, newBalance) {
+  spawnConfetti();
+  document.getElementById('card').innerHTML = `
+    <div class="check">🎉</div>
+    <div class="title">Payment Successful!</div>
+    <div class="sub">Your chips have been added to your account</div>
+    <div class="chips-added">
+      <div class="chips-label">Chips Added</div>
+      <div class="chips-amount">+$${chips.toLocaleString()}</div>
+    </div>
+    <div class="new-balance">New balance: <strong>$${newBalance.toLocaleString()}</strong></div>
+    <a class="btn" href="blackjack.html">🃏 &nbsp; Back to the Table</a>
+    <div class="redirect-note">Redirecting automatically in <span id="countdown">5</span>s...</div>
+  `;
+
+  // Update localStorage balance
+  try {
+    const user = JSON.parse(localStorage.getItem('bj_user') || '{}');
+    user.balance = newBalance;
+    localStorage.setItem('bj_user', JSON.stringify(user));
+  } catch {}
+
+  // Countdown redirect
+  let secs = 5;
+  const interval = setInterval(() => {
+    secs--;
+    const el = document.getElementById('countdown');
+    if (el) el.textContent = secs;
+    if (secs <= 0) { clearInterval(interval); window.location.href = 'blackjack.html'; }
+  }, 1000);
+}
+
+function showError(msg) {
+  document.getElementById('card').innerHTML = `
+    <div style="font-size:48px;margin-bottom:20px;">⚠️</div>
+    <div class="title" style="color:#ffd764">Heads Up</div>
+    <div class="error-state" style="margin:16px 0 28px">${msg}</div>
+    <a class="btn" href="blackjack.html">Back to the Table</a>
+  `;
+}
+
+function spawnConfetti() {
+  const colors = ['#ffd764','#4cff91','#ff6b6b','#5dade2','#af7ac5'];
+  for (let i = 0; i < 80; i++) {
+    setTimeout(() => {
+      const c = document.createElement('div');
+      c.className = 'confetti-piece';
+      c.style.left = Math.random() * 100 + 'vw';
+      c.style.top = '-10px';
+      c.style.background = colors[Math.floor(Math.random() * colors.length)];
+      c.style.transform = `rotate(${Math.random() * 360}deg)`;
+      c.style.animationDuration = (1.5 + Math.random()) + 's';
+      document.body.appendChild(c);
+      setTimeout(() => c.remove(), 2500);
+    }, Math.random() * 800);
+  }
+}
+
+verify();
+</script>
+</body>
+</html>

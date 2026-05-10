@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Tournaments — Blackjack Casino Royale</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:#0a0a0f;color:#f0f0f0;font-family:'Georgia',serif;min-height:100vh;}
+
+/* NAV */
+.nav{display:flex;align-items:center;justify-content:space-between;padding:14px 28px;background:rgba(0,0,0,.7);border-bottom:1px solid rgba(201,162,39,.2);position:sticky;top:0;z-index:100;backdrop-filter:blur(8px);}
+.nav-logo{color:#ffd764;font-size:20px;font-weight:700;letter-spacing:4px;text-decoration:none;}
+.nav-links{display:flex;gap:20px;align-items:center;}
+.nav-link{color:rgba(255,255,255,.6);text-decoration:none;font-size:13px;letter-spacing:1px;transition:.2s;}
+.nav-link:hover,.nav-link.active{color:#ffd764;}
+.nav-balance{color:#4cff91;font-weight:700;font-size:15px;}
+
+/* PAGE */
+.page{max-width:1100px;margin:0 auto;padding:36px 20px;}
+.page-title{font-size:30px;color:#ffd764;letter-spacing:4px;margin-bottom:8px;text-align:center;}
+.page-sub{text-align:center;color:rgba(255,255,255,.4);font-size:14px;letter-spacing:1px;margin-bottom:40px;}
+
+/* TABS */
+.tabs{display:flex;gap:0;border-bottom:2px solid rgba(255,255,255,.08);margin-bottom:32px;}
+.tab{padding:12px 28px;cursor:pointer;color:rgba(255,255,255,.4);font-size:13px;letter-spacing:1px;border-bottom:2px solid transparent;margin-bottom:-2px;transition:.2s;}
+.tab.active{color:#ffd764;border-bottom-color:#ffd764;}
+.tab-panel{display:none;}
+.tab-panel.active{display:block;}
+
+/* TOURNAMENT CARD */
+.tourn-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:20px;}
+.tourn-card{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:24px;position:relative;overflow:hidden;transition:border-color .2s;}
+.tourn-card:hover{border-color:rgba(201,162,39,.4);}
+.tourn-card.active-tourn{border-color:rgba(76,255,145,.3);}
+.tourn-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,#c9a227,#ffd764);}
+.tourn-card.active-tourn::before{background:linear-gradient(90deg,#00cc66,#4cff91);}
+.tourn-badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:10px;letter-spacing:2px;font-weight:700;margin-bottom:12px;}
+.badge-upcoming{background:rgba(201,162,39,.15);color:#ffd764;border:1px solid rgba(201,162,39,.3);}
+.badge-active{background:rgba(76,255,145,.15);color:#4cff91;border:1px solid rgba(76,255,145,.3);}
+.badge-ended{background:rgba(255,255,255,.05);color:rgba(255,255,255,.4);border:1px solid rgba(255,255,255,.1);}
+.tourn-name{font-size:18px;color:#fff;margin-bottom:6px;letter-spacing:1px;}
+.tourn-type{font-size:11px;color:rgba(255,255,255,.3);letter-spacing:2px;text-transform:uppercase;margin-bottom:16px;}
+.tourn-meta{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px;}
+.tourn-meta-item{background:rgba(0,0,0,.3);border-radius:8px;padding:10px;}
+.tourn-meta-label{font-size:10px;color:rgba(255,255,255,.3);letter-spacing:1px;margin-bottom:4px;}
+.tourn-meta-val{font-size:16px;color:#ffd764;font-weight:700;}
+.tourn-time{font-size:12px;color:rgba(255,255,255,.4);margin-bottom:16px;}
+.tourn-time span{color:#fff;}
+.tourn-progress{height:4px;background:rgba(255,255,255,.08);border-radius:2px;margin-bottom:16px;overflow:hidden;}
+.tourn-progress-fill{height:100%;background:linear-gradient(90deg,#4cff91,#00cc66);border-radius:2px;transition:width .5s;}
+.btn{padding:11px 24px;border:none;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700;letter-spacing:1px;transition:.2s;}
+.btn-gold{background:linear-gradient(135deg,#c9a227,#ffd764);color:#1a0a00;width:100%;}
+.btn-gold:hover{filter:brightness(1.1);}
+.btn-gold:disabled{opacity:.4;cursor:not-allowed;}
+.btn-outline{background:transparent;border:1px solid rgba(255,255,255,.2);color:rgba(255,255,255,.6);width:100%;}
+.btn-outline:hover{border-color:#ffd764;color:#ffd764;}
+.my-chips{margin-top:12px;text-align:center;font-size:13px;color:rgba(255,255,255,.5);}
+.my-chips span{color:#4cff91;font-weight:700;}
+
+/* LIVE LEADERBOARD MODAL */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:500;display:flex;align-items:center;justify-content:center;padding:20px;opacity:0;pointer-events:none;transition:.3s;}
+.modal-overlay.open{opacity:1;pointer-events:all;}
+.modal{background:#0e0e18;border:1px solid rgba(201,162,39,.3);border-radius:16px;width:min(640px,100%);max-height:85vh;overflow:hidden;display:flex;flex-direction:column;}
+.modal-header{padding:20px 24px;border-bottom:1px solid rgba(255,255,255,.08);display:flex;align-items:center;justify-content:space-between;}
+.modal-title{font-size:18px;color:#ffd764;letter-spacing:2px;}
+.modal-close{background:none;border:none;color:rgba(255,255,255,.5);font-size:22px;cursor:pointer;line-height:1;}
+.modal-body{padding:20px 24px;overflow-y:auto;flex:1;}
+.lb-table{width:100%;border-collapse:collapse;}
+.lb-table th{text-align:left;padding:8px 12px;font-size:11px;letter-spacing:1px;color:rgba(255,255,255,.3);border-bottom:1px solid rgba(255,255,255,.06);}
+.lb-table td{padding:10px 12px;font-size:14px;border-bottom:1px solid rgba(255,255,255,.04);}
+.lb-rank{color:rgba(255,255,255,.3);font-size:12px;width:36px;}
+.lb-rank.top1{color:#ffd764;font-weight:700;}
+.lb-rank.top2{color:#aaa;font-weight:700;}
+.lb-rank.top3{color:#cd7f32;font-weight:700;}
+.lb-user{display:flex;align-items:center;gap:10px;}
+.lb-avatar{width:30px;height:30px;border-radius:50%;object-fit:cover;background:rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#ffd764;flex-shrink:0;}
+.lb-name{font-size:14px;color:#fff;}
+.lb-chips{color:#4cff91;font-weight:700;}
+.lb-me{background:rgba(201,162,39,.08);}
+
+/* EMPTY STATE */
+.empty-state{text-align:center;padding:60px 20px;}
+.empty-icon{font-size:48px;margin-bottom:16px;}
+.empty-title{font-size:18px;color:rgba(255,255,255,.4);margin-bottom:8px;}
+.empty-sub{font-size:13px;color:rgba(255,255,255,.2);}
+
+/* COUNTDOWN */
+.countdown{font-family:monospace;color:#ffd764;font-size:14px;font-weight:700;letter-spacing:1px;}
+
+.tourn-my-entry{background:rgba(76,255,145,.06);border:1px solid rgba(76,255,145,.2);border-radius:8px;padding:12px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;font-size:13px;}
+.entry-chips{color:#4cff91;font-weight:700;font-size:16px;}
+.entry-rank{color:rgba(255,255,255,.5);}
+
+@media(max-width:600px){.tourn-grid{grid-template-columns:1fr;}.nav-links .nav-link:not(.active):not(:last-child){display:none;}}
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <a class="nav-logo" href="blackjack.html">♠ BLACKJACK</a>
+  <div class="nav-links">
+    <a class="nav-link" href="blackjack.html">Play</a>
+    <a class="nav-link active" href="tournament.html">🏆 Tournaments</a>
+    <a class="nav-link" href="shop.html">🎨 Shop</a>
+    <a class="nav-link" href="leaderboard.html">Leaderboard</a>
+    <a class="nav-link" href="profile.html">Profile</a>
+    <span class="nav-balance" id="navBalance">$—</span>
+  </div>
+</nav>
+
+<div class="page">
+  <div class="page-title">🏆 TOURNAMENTS</div>
+  <div class="page-sub">Buy in · Compete · Win the prize pool</div>
+
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab('active')">Active & Upcoming</div>
+    <div class="tab" onclick="switchTab('recent')">Recent Results</div>
+  </div>
+
+  <div class="tab-panel active" id="tab-active">
+    <div class="tourn-grid" id="activeGrid">
+      <div class="empty-state"><div class="empty-icon">⏳</div><div class="empty-title">Loading tournaments…</div></div>
+    </div>
+  </div>
+  <div class="tab-panel" id="tab-recent">
+    <div class="tourn-grid" id="recentGrid">
+      <div class="empty-state"><div class="empty-icon">📋</div><div class="empty-title">No recent tournaments</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- Leaderboard Modal -->
+<div class="modal-overlay" id="lbModal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="lbModalTitle">Tournament Leaderboard</div>
+      <button class="modal-close" onclick="closeLbModal()">✕</button>
+    </div>
+    <div class="modal-body" id="lbModalBody">
+      <div class="empty-state"><div class="empty-icon">⏳</div><div class="empty-title">Loading…</div></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = 'http://localhost:4000/api';
+let token = localStorage.getItem('token');
+let myUsername = null;
+
+if (!token) { window.location.href = 'index.html'; }
+
+async function api(method, path, body) {
+  const opts = { method, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` } };
+  if (body) opts.body = JSON.stringify(body);
+  const r = await fetch(API + path, opts);
+  return r.json();
+}
+
+function formatDate(d) {
+  if (!d) return '—';
+  const dt = new Date(d);
+  return dt.toLocaleDateString() + ' ' + dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function countdown(endsAt) {
+  const diff = new Date(endsAt) - Date.now();
+  if (diff <= 0) return 'Ended';
+  const h = Math.floor(diff / 3600000);
+  const m = Math.floor((diff % 3600000) / 60000);
+  const s = Math.floor((diff % 60000) / 1000);
+  if (h > 24) return `${Math.floor(h/24)}d ${h%24}h`;
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m ${s}s`;
+}
+
+function renderTournCard(t, isMine) {
+  const joined = t.my_chips !== null && t.my_chips !== undefined;
+  const pct = Math.min(100, Math.round((t.entrant_count || 0) / t.max_players * 100));
+  const statusLabel = { upcoming:'UPCOMING', active:'LIVE', ended:'ENDED' }[t.status] || t.status.toUpperCase();
+  const badgeClass = { upcoming:'badge-upcoming', active:'badge-active', ended:'badge-ended' }[t.status];
+
+  return `
+    <div class="tourn-card ${t.status === 'active' ? 'active-tourn' : ''}">
+      <div class="tourn-badge ${badgeClass}">${statusLabel}</div>
+      <div class="tourn-name">${t.name}</div>
+      <div class="tourn-type">${t.type} tournament</div>
+      ${joined && t.status === 'active' ? `
+        <div class="tourn-my-entry">
+          <div>
+            <div style="font-size:10px;color:rgba(255,255,255,.3);letter-spacing:1px;margin-bottom:2px;">YOUR CHIPS</div>
+            <div class="entry-chips">$${Number(t.my_chips).toLocaleString()}</div>
+          </div>
+          <div>
+            <div style="font-size:10px;color:rgba(255,255,255,.3);letter-spacing:1px;margin-bottom:2px;">HANDS</div>
+            <div class="entry-rank">${t.my_hands || 0}</div>
+          </div>
+        </div>
+      ` : ''}
+      <div class="tourn-meta">
+        <div class="tourn-meta-item">
+          <div class="tourn-meta-label">BUY-IN</div>
+          <div class="tourn-meta-val">$${Number(t.buy_in).toLocaleString()}</div>
+        </div>
+        <div class="tourn-meta-item">
+          <div class="tourn-meta-label">PRIZE POOL</div>
+          <div class="tourn-meta-val">$${Number(t.prize_pool).toLocaleString()}</div>
+        </div>
+        <div class="tourn-meta-item">
+          <div class="tourn-meta-label">PLAYERS</div>
+          <div class="tourn-meta-val">${t.entrant_count || 0} / ${t.max_players}</div>
+        </div>
+        <div class="tourn-meta-item">
+          <div class="tourn-meta-label">${t.status === 'active' ? 'ENDS IN' : 'STARTS'}</div>
+          <div class="tourn-meta-val" style="font-size:12px;" id="cd-${t.id}">
+            ${t.status === 'active' ? countdown(t.ends_at) : formatDate(t.starts_at)}
+          </div>
+        </div>
+      </div>
+      <div class="tourn-progress"><div class="tourn-progress-fill" style="width:${pct}%"></div></div>
+      ${t.status !== 'ended' ? `
+        ${joined
+          ? `<button class="btn btn-outline" onclick="viewLeaderboard(${t.id},'${t.name}')">📊 View Leaderboard</button>
+             ${t.status === 'active' ? `<div style="margin-top:10px;"><a href="blackjack.html?tournament=${t.id}" class="btn btn-gold" style="display:block;text-align:center;text-decoration:none;">Play in Tournament →</a></div>` : ''}`
+          : `<button class="btn btn-gold" onclick="joinTournament(${t.id},this)">Join — Buy In $${Number(t.buy_in).toLocaleString()}</button>`
+        }
+      ` : `<button class="btn btn-outline" onclick="viewLeaderboard(${t.id},'${t.name}')">📊 Final Results</button>`}
+    </div>`;
+}
+
+async function loadTournaments() {
+  const data = await api('GET', '/tournaments');
+  if (data.error) { console.warn(data.error); return; }
+
+  const activeGrid = document.getElementById('activeGrid');
+  const recentGrid = document.getElementById('recentGrid');
+
+  if (!data.active?.length) {
+    activeGrid.innerHTML = `<div class="empty-state"><div class="empty-icon">🏆</div><div class="empty-title">No active tournaments right now</div><div class="empty-sub">Check back soon — new tournaments start regularly!</div></div>`;
+  } else {
+    activeGrid.innerHTML = data.active.map(t => renderTournCard(t)).join('');
+    // Live countdown
+    setInterval(() => {
+      data.active.filter(t => t.status === 'active').forEach(t => {
+        const el = document.getElementById(`cd-${t.id}`);
+        if (el) el.textContent = countdown(t.ends_at);
+      });
+    }, 1000);
+  }
+
+  if (!data.recent?.length) {
+    recentGrid.innerHTML = `<div class="empty-state"><div class="empty-icon">📋</div><div class="empty-title">No recent tournaments</div></div>`;
+  } else {
+    recentGrid.innerHTML = data.recent.map(t => renderTournCard(t)).join('');
+  }
+}
+
+async function joinTournament(id, btn) {
+  btn.disabled = true;
+  btn.textContent = 'Joining…';
+  const data = await api('POST', `/tournaments/${id}/join`);
+  if (data.error) {
+    alert(data.error);
+    btn.disabled = false;
+    btn.textContent = btn.textContent.replace('Joining…', 'Join');
+    return;
+  }
+  document.getElementById('navBalance').textContent = `$${data.newBalance.toLocaleString()}`;
+  alert(`✅ Joined! You start with $${data.startingChips.toLocaleString()} tournament chips.\nGood luck at the tables!`);
+  loadTournaments();
+}
+
+async function viewLeaderboard(id, name) {
+  document.getElementById('lbModalTitle').textContent = `${name} — Leaderboard`;
+  document.getElementById('lbModalBody').innerHTML = `<div class="empty-state"><div class="empty-icon">⏳</div><div class="empty-title">Loading…</div></div>`;
+  document.getElementById('lbModal').classList.add('open');
+
+  const data = await api('GET', `/tournaments/${id}`);
+  if (data.error) { document.getElementById('lbModalBody').innerHTML = `<p style="color:red;">${data.error}</p>`; return; }
+
+  const lb = data.leaderboard || [];
+  if (!lb.length) {
+    document.getElementById('lbModalBody').innerHTML = `<div class="empty-state"><div class="empty-icon">📋</div><div class="empty-title">No entries yet</div></div>`;
+    return;
+  }
+
+  const rankClass = r => r === 1 ? 'top1' : r === 2 ? 'top2' : r === 3 ? 'top3' : '';
+  const rankIcon  = r => r === 1 ? '🥇' : r === 2 ? '🥈' : r === 3 ? '🥉' : r;
+
+  document.getElementById('lbModalBody').innerHTML = `
+    <table class="lb-table">
+      <thead><tr>
+        <th>#</th><th>Player</th><th>Chips</th><th>Hands</th>
+      </tr></thead>
+      <tbody>
+      ${lb.map(p => `
+        <tr class="${p.username === myUsername ? 'lb-me' : ''}">
+          <td class="lb-rank ${rankClass(p.rank)}">${rankIcon(p.rank)}</td>
+          <td>
+            <div class="lb-user">
+              ${p.avatar ? `<img class="lb-avatar" src="${p.avatar}" alt="">` : `<div class="lb-avatar">${(p.display_name||p.username)[0].toUpperCase()}</div>`}
+              <div class="lb-name">${p.display_name || p.username}${p.username === myUsername ? ' (you)' : ''}</div>
+            </div>
+          </td>
+          <td class="lb-chips">$${Number(p.current_chips).toLocaleString()}</td>
+          <td style="color:rgba(255,255,255,.4);">${p.hands_played}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>`;
+}
+
+function closeLbModal() {
+  document.getElementById('lbModal').classList.remove('open');
+}
+document.getElementById('lbModal').addEventListener('click', e => { if (e.target === e.currentTarget) closeLbModal(); });
+
+function switchTab(tab) {
+  document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', ['active','recent'][i] === tab));
+  document.querySelectorAll('.tab-panel').forEach((p,i) => p.classList.toggle('active', ['tab-active','tab-recent'][i] === 'tab-' + tab));
+}
+
+// Load user balance
+fetch(`${API}/me`, { headers: { Authorization: `Bearer ${token}` } })
+  .then(r => r.json()).then(u => {
+    if (u.error) return;
+    myUsername = u.username;
+    document.getElementById('navBalance').textContent = `$${u.balance.toLocaleString()}`;
+  });
+
+loadTournaments();
+</script>
+</body>
+</html>

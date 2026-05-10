@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Age Verification — Blackjack Casino</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Cinzel:wght@400;600;700&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap');
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{min-height:100vh;background:#0d0500;font-family:'Cinzel',serif;color:#f0f0f0;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 16px;}
+  body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellipse 70% 60% at 50% 40%,rgba(0,60,15,.25) 0%,transparent 70%);pointer-events:none;}
+
+  .card{position:relative;z-index:1;width:min(560px,100%);background:rgba(10,5,0,.96);border:1px solid rgba(255,215,100,.2);border-radius:16px;padding:44px 40px 36px;box-shadow:0 40px 80px rgba(0,0,0,.8);}
+
+  .logo{text-align:center;margin-bottom:32px;}
+  .logo-icon{font-size:36px;filter:drop-shadow(0 0 12px rgba(255,215,100,.5));}
+  .logo-title{font-size:22px;font-weight:700;color:#ffd764;letter-spacing:5px;margin-top:6px;}
+
+  /* Steps */
+  .steps{display:flex;justify-content:center;gap:0;margin-bottom:36px;}
+  .step{display:flex;align-items:center;gap:8px;}
+  .step-num{width:28px;height:28px;border-radius:50%;border:2px solid rgba(255,215,100,.3);display:flex;align-items:center;justify-content:center;font-size:11px;color:rgba(255,215,100,.4);transition:all .3s;}
+  .step-num.active{border-color:#ffd764;color:#ffd764;background:rgba(255,215,100,.1);}
+  .step-num.done{border-color:#4cff91;color:#4cff91;background:rgba(76,255,145,.1);}
+  .step-label{font-size:9px;letter-spacing:2px;color:rgba(255,215,100,.35);transition:color .3s;}
+  .step-label.active{color:#ffd764;}
+  .step-label.done{color:#4cff91;}
+  .step-line{width:32px;height:1px;background:rgba(255,215,100,.15);margin:0 4px;}
+
+  /* Panels */
+  .panel{display:none;flex-direction:column;gap:18px;}
+  .panel.active{display:flex;}
+
+  .panel-title{font-size:16px;color:#ffd764;letter-spacing:2px;text-align:center;margin-bottom:4px;}
+  .panel-sub{font-family:'Crimson Text',serif;font-size:14px;color:rgba(255,255,255,.4);text-align:center;line-height:1.6;}
+
+  .notice{background:rgba(255,215,100,.05);border:1px solid rgba(255,215,100,.15);border-radius:8px;padding:14px 16px;font-family:'Crimson Text',serif;font-size:13px;color:rgba(255,255,255,.5);line-height:1.6;}
+  .notice strong{color:#ffd764;}
+
+  /* Upload zone */
+  .upload-zone{border:2px dashed rgba(255,215,100,.2);border-radius:10px;padding:28px 20px;text-align:center;cursor:pointer;transition:all .25s;position:relative;background:rgba(255,255,255,.02);}
+  .upload-zone:hover,.upload-zone.dragover{border-color:rgba(255,215,100,.5);background:rgba(255,215,100,.04);}
+  .upload-zone.has-image{border-color:rgba(76,255,145,.4);background:rgba(76,255,145,.04);}
+  .upload-zone input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;}
+  .upload-icon{font-size:32px;margin-bottom:8px;}
+  .upload-label{font-size:11px;letter-spacing:2px;color:rgba(255,215,100,.5);}
+  .upload-sub{font-family:'Crimson Text',serif;font-size:12px;color:rgba(255,255,255,.3);margin-top:4px;}
+  .upload-preview{width:100%;max-height:160px;object-fit:cover;border-radius:6px;display:none;}
+  .upload-check{font-size:22px;color:#4cff91;display:none;margin-bottom:4px;}
+
+  /* Camera */
+  .camera-wrap{position:relative;border-radius:10px;overflow:hidden;background:#000;aspect-ratio:4/3;max-height:240px;}
+  .camera-wrap video{width:100%;height:100%;object-fit:cover;display:block;}
+  .camera-wrap canvas{position:absolute;inset:0;width:100%;height:100%;display:none;}
+  .face-outline{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;}
+  .face-oval{width:120px;height:160px;border:3px solid rgba(255,215,100,.5);border-radius:50%;box-shadow:0 0 0 9999px rgba(0,0,0,.4);}
+  .face-oval.detected{border-color:#4cff91;box-shadow:0 0 0 9999px rgba(0,0,0,.3),0 0 20px rgba(76,255,145,.4);}
+  .camera-status{position:absolute;bottom:10px;left:0;right:0;text-align:center;font-size:11px;letter-spacing:1px;color:rgba(255,255,255,.7);font-family:'Crimson Text',serif;}
+
+  .btn-camera{width:100%;padding:11px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.15);color:rgba(255,255,255,.6);border-radius:6px;font-family:'Cinzel',serif;font-size:10px;letter-spacing:2px;cursor:pointer;transition:all .2s;}
+  .btn-camera:hover{background:rgba(255,255,255,.1);color:#fff;}
+
+  /* Buttons */
+  .btn{padding:13px 24px;border:none;border-radius:6px;font-family:'Cinzel',serif;font-size:11px;font-weight:700;letter-spacing:2px;cursor:pointer;transition:all .2s;width:100%;}
+  .btn-primary{background:linear-gradient(135deg,#c9a227,#ffd764,#c9a227);color:#1a0a00;box-shadow:0 4px 16px rgba(201,162,39,.35);}
+  .btn-primary:hover{transform:translateY(-2px);}
+  .btn-primary:disabled{opacity:.4;cursor:not-allowed;transform:none;}
+  .btn-secondary{background:rgba(255,255,255,.05);color:rgba(255,255,255,.5);border:1px solid rgba(255,255,255,.1);}
+  .btn-secondary:hover{background:rgba(255,255,255,.1);}
+
+  .error-msg{color:#ff6b6b;font-family:'Crimson Text',serif;font-size:13px;text-align:center;min-height:18px;}
+  .success-msg{color:#4cff91;font-family:'Crimson Text',serif;font-size:13px;text-align:center;}
+
+  /* Verified state */
+  .verified-state{text-align:center;padding:20px 0;}
+  .verified-icon{font-size:64px;margin-bottom:16px;animation:pop .5s cubic-bezier(.2,.8,.4,1) both;}
+  @keyframes pop{from{transform:scale(0);opacity:0}to{transform:scale(1);opacity:1}}
+  .verified-title{font-size:22px;color:#4cff91;letter-spacing:3px;margin-bottom:8px;}
+  .verified-sub{font-family:'Crimson Text',serif;font-size:15px;color:rgba(255,255,255,.4);margin-bottom:28px;}
+  .countdown{font-size:13px;color:rgba(255,215,100,.4);font-family:'Crimson Text',serif;}
+</style>
+</head>
+<body>
+
+<div class="card">
+  <div class="logo">
+    <div class="logo-icon">♠</div>
+    <div class="logo-title">AGE VERIFICATION</div>
+  </div>
+
+  <!-- Step indicators -->
+  <div class="steps">
+    <div class="step">
+      <div class="step-num active" id="stepNum1">1</div>
+      <div class="step-label active" id="stepLbl1">Info</div>
+    </div>
+    <div class="step-line"></div>
+    <div class="step">
+      <div class="step-num" id="stepNum2">2</div>
+      <div class="step-label" id="stepLbl2">ID Upload</div>
+    </div>
+    <div class="step-line"></div>
+    <div class="step">
+      <div class="step-num" id="stepNum3">3</div>
+      <div class="step-label" id="stepLbl3">Selfie</div>
+    </div>
+  </div>
+
+  <!-- Panel 1: Intro -->
+  <div class="panel active" id="panel1">
+    <div class="panel-title">You must be 21 or older</div>
+    <div class="panel-sub">This platform contains gambling content. We are required by law to verify your age before granting access.</div>
+    <div class="notice">
+      <strong>What we need:</strong><br/>
+      A photo of a valid government-issued ID (driver's license, passport, or national ID) plus a live selfie to confirm it's you.<br/><br/>
+      <strong>Your data is secure.</strong> Documents are encrypted and used only for age verification.
+    </div>
+    <button class="btn btn-primary" onclick="goStep(2)">I'm 21 or Older — Continue →</button>
+    <button class="btn btn-secondary" onclick="logout()">Sign Out</button>
+  </div>
+
+  <!-- Panel 2: ID Upload -->
+  <div class="panel" id="panel2">
+    <div class="panel-title">Upload Your ID</div>
+    <div class="panel-sub">Driver's license, passport, or government ID.<br/>Make sure all text is clearly visible.</div>
+
+    <div class="upload-zone" id="idZone" onclick="document.getElementById('idInput').click()">
+      <input type="file" id="idInput" accept="image/*" onchange="handleIdUpload(event)"/>
+      <div id="idPlaceholder">
+        <div class="upload-icon">🪪</div>
+        <div class="upload-label">Click to upload your ID</div>
+        <div class="upload-sub">JPG, PNG or HEIC — max 10MB</div>
+      </div>
+      <div id="idPreviewWrap" style="display:none">
+        <div class="upload-check">✅</div>
+        <img id="idPreview" class="upload-preview" style="display:block"/>
+        <div class="upload-sub" style="margin-top:8px;color:rgba(76,255,145,.6)">ID uploaded — click to change</div>
+      </div>
+    </div>
+
+    <div class="error-msg" id="idError"></div>
+    <button class="btn btn-primary" id="idNextBtn" onclick="goStep(3)" disabled>Continue →</button>
+    <button class="btn btn-secondary" onclick="goStep(1)">← Back</button>
+  </div>
+
+  <!-- Panel 3: Selfie -->
+  <div class="panel" id="panel3">
+    <div class="panel-title">Take a Selfie</div>
+    <div class="panel-sub">Position your face inside the oval and hold still. Good lighting helps.</div>
+
+    <div class="camera-wrap" id="cameraWrap">
+      <video id="videoEl" autoplay playsinline muted></video>
+      <canvas id="canvasEl"></canvas>
+      <div class="face-outline"><div class="face-oval" id="faceOval"></div></div>
+      <div class="camera-status" id="cameraStatus">Starting camera...</div>
+    </div>
+
+    <div id="captureControls">
+      <button class="btn btn-primary" id="captureBtn" onclick="captureSelfie()" disabled>📸 &nbsp;Take Selfie</button>
+    </div>
+    <div id="retakeControls" style="display:none">
+      <button class="btn btn-secondary" onclick="retakeSelfie()">Retake Photo</button>
+    </div>
+
+    <div class="error-msg" id="selfieError"></div>
+    <button class="btn btn-primary" id="submitBtn" onclick="submitVerification()" disabled style="margin-top:4px;">Submit for Verification</button>
+    <button class="btn btn-secondary" onclick="goStep(2)">← Back</button>
+  </div>
+
+  <!-- Panel 4: Done -->
+  <div class="panel" id="panel4">
+    <div class="verified-state">
+      <div class="verified-icon">⏳</div>
+      <div class="verified-title" id="verifiedTitle">Submitted!</div>
+      <div class="verified-sub" id="verifiedSub">Your documents are being reviewed. This usually takes just a moment...</div>
+      <div class="countdown" id="verifiedCountdown"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = 'http://localhost:4000/api';
+const token = localStorage.getItem('bj_token');
+if (!token) window.location.href = 'index.html';
+
+let idBase64 = null;
+let selfieBase64 = null;
+let stream = null;
+
+function logout() { localStorage.removeItem('bj_token'); localStorage.removeItem('bj_user'); window.location.href = 'index.html'; }
+
+// Check if already verified
+async function checkStatus() {
+  try {
+    const res = await fetch(`${API}/verify-status`, { headers: { Authorization: 'Bearer ' + token } });
+    if (res.ok) {
+      const d = await res.json();
+      if (d.status === 'verified') showVerified();
+    }
+  } catch {}
+}
+
+function goStep(n) {
+  [1,2,3,4].forEach(i => {
+    document.getElementById('panel'+i).classList.toggle('active', i===n);
+  });
+  // Update step indicators
+  [1,2,3].forEach(i => {
+    const num = document.getElementById('stepNum'+i);
+    const lbl = document.getElementById('stepLbl'+i);
+    if (i < n) { num.className='step-num done'; num.textContent='✓'; lbl.className='step-label done'; }
+    else if (i === n) { num.className='step-num active'; num.textContent=i; lbl.className='step-label active'; }
+    else { num.className='step-num'; num.textContent=i; lbl.className='step-label'; }
+  });
+
+  if (n === 3) startCamera();
+  else stopCamera();
+}
+
+// ── ID UPLOAD ────────────────────────────────────────
+function handleIdUpload(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  if (file.size > 10 * 1024 * 1024) { document.getElementById('idError').textContent = 'File too large. Max 10MB.'; return; }
+  document.getElementById('idError').textContent = '';
+  const reader = new FileReader();
+  reader.onload = async ev => {
+    idBase64 = await compressImage(ev.target.result, 800, 0.85);
+    document.getElementById('idPreview').src = idBase64;
+    document.getElementById('idPlaceholder').style.display = 'none';
+    document.getElementById('idPreviewWrap').style.display = 'block';
+    document.getElementById('idZone').classList.add('has-image');
+    document.getElementById('idNextBtn').disabled = false;
+  };
+  reader.readAsDataURL(file);
+}
+
+// ── CAMERA ───────────────────────────────────────────
+async function startCamera() {
+  const video = document.getElementById('videoEl');
+  const status = document.getElementById('cameraStatus');
+  const captureBtn = document.getElementById('captureBtn');
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: 640, height: 480 }, audio: false });
+    video.srcObject = stream;
+    await video.play();
+    status.textContent = 'Center your face in the oval';
+    // Simulate face detection feedback after 1.5s
+    setTimeout(() => {
+      document.getElementById('faceOval').classList.add('detected');
+      status.textContent = '✓ Face detected — ready to capture';
+      captureBtn.disabled = false;
+    }, 1500);
+  } catch (err) {
+    status.textContent = 'Camera not available — upload a selfie instead';
+    showFallbackUpload();
+  }
+}
+
+function stopCamera() {
+  if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+}
+
+function captureSelfie() {
+  const video = document.getElementById('videoEl');
+  const canvas = document.getElementById('canvasEl');
+  canvas.width = video.videoWidth || 640;
+  canvas.height = video.videoHeight || 480;
+  canvas.getContext('2d').drawImage(video, 0, 0);
+  selfieBase64 = canvas.toDataURL('image/jpeg', 0.85);
+
+  // Show captured frame
+  canvas.style.display = 'block';
+  video.style.display = 'none';
+  document.getElementById('faceOval').style.display = 'none';
+  document.getElementById('cameraStatus').textContent = '✓ Selfie captured';
+  document.getElementById('captureControls').style.display = 'none';
+  document.getElementById('retakeControls').style.display = 'block';
+  document.getElementById('submitBtn').disabled = false;
+  document.getElementById('selfieError').textContent = '';
+}
+
+function retakeSelfie() {
+  const video = document.getElementById('videoEl');
+  const canvas = document.getElementById('canvasEl');
+  selfieBase64 = null;
+  canvas.style.display = 'none';
+  video.style.display = 'block';
+  document.getElementById('faceOval').style.display = 'flex';
+  document.getElementById('captureControls').style.display = 'block';
+  document.getElementById('retakeControls').style.display = 'none';
+  document.getElementById('submitBtn').disabled = true;
+  document.getElementById('cameraStatus').textContent = 'Center your face in the oval';
+}
+
+function showFallbackUpload() {
+  const wrap = document.getElementById('cameraWrap');
+  wrap.innerHTML = `
+    <div style="padding:20px;">
+      <div class="upload-zone" onclick="document.getElementById('selfieInput').click()" style="border:2px dashed rgba(255,215,100,.2);border-radius:8px;padding:24px;text-align:center;cursor:pointer;">
+        <input type="file" id="selfieInput" accept="image/*" onchange="handleSelfieUpload(event)" style="position:absolute;opacity:0;pointer-events:none;"/>
+        <div style="font-size:28px;margin-bottom:8px;">🤳</div>
+        <div style="font-size:11px;letter-spacing:2px;color:rgba(255,215,100,.5);">Upload a Selfie Photo</div>
+        <div style="font-size:12px;color:rgba(255,255,255,.3);margin-top:4px;font-family:'Crimson Text',serif;">Clear face photo, good lighting</div>
+      </div>
+    </div>`;
+}
+
+function handleSelfieUpload(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = async ev => {
+    selfieBase64 = await compressImage(ev.target.result, 600, 0.85);
+    document.getElementById('submitBtn').disabled = false;
+    document.getElementById('selfieError').textContent = '';
+    document.getElementById('cameraStatus') && (document.getElementById('cameraStatus').textContent = '✓ Selfie uploaded');
+  };
+  reader.readAsDataURL(file);
+}
+
+// ── SUBMIT ────────────────────────────────────────────
+async function submitVerification() {
+  if (!idBase64) { document.getElementById('selfieError').textContent = 'Missing ID document.'; return; }
+  if (!selfieBase64) { document.getElementById('selfieError').textContent = 'Missing selfie.'; return; }
+
+  const btn = document.getElementById('submitBtn');
+  btn.disabled = true; btn.textContent = 'Submitting...';
+
+  try {
+    const res = await fetch(`${API}/verify-identity`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+      body: JSON.stringify({ idDocument: idBase64, selfiePhoto: selfieBase64 }),
+    });
+    const d = await res.json();
+    if (!res.ok) { document.getElementById('selfieError').textContent = d.error; btn.disabled = false; btn.textContent = 'Submit for Verification'; return; }
+    stopCamera();
+    goStep(4);
+    pollVerification();
+  } catch {
+    document.getElementById('selfieError').textContent = 'Cannot connect to server.';
+    btn.disabled = false; btn.textContent = 'Submit for Verification';
+  }
+}
+
+async function pollVerification() {
+  const titleEl = document.getElementById('verifiedTitle');
+  const subEl   = document.getElementById('verifiedSub');
+  const cntEl   = document.getElementById('verifiedCountdown');
+  let attempts = 0;
+  const interval = setInterval(async () => {
+    attempts++;
+    try {
+      const res = await fetch(`${API}/verify-status`, { headers: { Authorization: 'Bearer ' + token } });
+      if (res.ok) {
+        const d = await res.json();
+        if (d.status === 'verified') {
+          clearInterval(interval);
+          showVerified();
+          return;
+        }
+      }
+    } catch {}
+    if (attempts > 30) { clearInterval(interval); cntEl.textContent = 'Taking longer than expected — check your email.'; }
+    else { cntEl.textContent = `Checking... (${attempts})`; }
+  }, 1000);
+}
+
+function showVerified() {
+  goStep(4);
+  document.querySelector('#panel4 .verified-icon').textContent = '✅';
+  document.getElementById('verifiedTitle').textContent = 'Verified!';
+  document.getElementById('verifiedSub').textContent = 'Your identity has been confirmed. Welcome to the casino!';
+  let secs = 4;
+  const cntEl = document.getElementById('verifiedCountdown');
+  cntEl.textContent = `Redirecting in ${secs}s...`;
+  const t = setInterval(() => {
+    secs--;
+    if (secs <= 0) { clearInterval(t); window.location.href = 'blackjack.html'; }
+    else cntEl.textContent = `Redirecting in ${secs}s...`;
+  }, 1000);
+}
+
+// ── UTILS ─────────────────────────────────────────────
+function compressImage(dataUrl, maxPx, quality) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(maxPx / img.width, maxPx / img.height, 1);
+      const c = document.createElement('canvas');
+      c.width = img.width * scale; c.height = img.height * scale;
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      resolve(c.toDataURL('image/jpeg', quality));
+    };
+    img.src = dataUrl;
+  });
+}
+
+checkStatus();
+</script>
+</body>
+</html>

@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Admin — Blackjack Casino</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap');
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{min-height:100vh;background:#080404;font-family:'Cinzel',serif;color:#f0f0f0;}
+  ::-webkit-scrollbar{width:6px;} ::-webkit-scrollbar-track{background:#111;} ::-webkit-scrollbar-thumb{background:#333;border-radius:3px;}
+
+  .nav{display:flex;align-items:center;justify-content:space-between;padding:12px 28px;background:#0d0600;border-bottom:1px solid rgba(255,215,100,.1);position:sticky;top:0;z-index:50;}
+  .nav-logo{font-size:16px;font-weight:700;color:#ffd764;letter-spacing:3px;}
+  .nav-badge{font-size:9px;background:#c0392b;color:#fff;padding:2px 8px;border-radius:3px;letter-spacing:2px;margin-left:8px;}
+  .nav-right{display:flex;gap:16px;align-items:center;}
+  .nav-link{font-size:10px;letter-spacing:2px;color:rgba(255,215,100,.4);text-decoration:none;cursor:pointer;transition:color .2s;}
+  .nav-link:hover{color:#ffd764;}
+
+  .layout{display:grid;grid-template-columns:200px 1fr;min-height:calc(100vh - 49px);}
+
+  /* SIDEBAR */
+  .sidebar{background:#0a0500;border-right:1px solid rgba(255,215,100,.08);padding:20px 0;}
+  .sidebar-item{display:flex;align-items:center;gap:10px;padding:11px 20px;font-size:10px;letter-spacing:2px;color:rgba(255,215,100,.4);cursor:pointer;transition:all .2s;border-left:3px solid transparent;}
+  .sidebar-item:hover{color:#ffd764;background:rgba(255,215,100,.04);}
+  .sidebar-item.active{color:#ffd764;border-left-color:#ffd764;background:rgba(255,215,100,.06);}
+  .sidebar-icon{font-size:16px;width:20px;text-align:center;}
+
+  /* MAIN */
+  .main{padding:28px;overflow-y:auto;}
+  .page{display:none;} .page.active{display:block;}
+  .page-title{font-size:20px;font-weight:700;color:#ffd764;letter-spacing:3px;margin-bottom:6px;}
+  .page-sub{font-family:'Crimson Text',serif;font-size:13px;color:rgba(255,255,255,.3);margin-bottom:24px;}
+
+  /* STATS GRID */
+  .stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:28px;}
+  .stat-box{background:#0d0600;border:1px solid rgba(255,215,100,.1);border-radius:10px;padding:18px 16px;text-align:center;}
+  .stat-box-val{font-size:28px;font-weight:700;color:#ffd764;margin-bottom:4px;}
+  .stat-box-val.green{color:#4cff91;} .stat-box-val.red{color:#ff6b6b;} .stat-box-val.blue{color:#5dade2;}
+  .stat-box-label{font-size:9px;letter-spacing:2px;color:rgba(255,255,255,.3);text-transform:uppercase;}
+
+  /* TABLE */
+  .table-wrap{background:#0d0600;border:1px solid rgba(255,215,100,.08);border-radius:10px;overflow:hidden;}
+  .table-header{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid rgba(255,215,100,.07);}
+  .table-title{font-size:11px;letter-spacing:3px;color:rgba(255,215,100,.5);}
+  .search-box{background:rgba(255,255,255,.04);border:1px solid rgba(255,215,100,.1);border-radius:4px;padding:6px 12px;color:#f0f0f0;font-family:'Crimson Text',serif;font-size:14px;outline:none;width:200px;}
+  .search-box::placeholder{color:rgba(255,255,255,.2);}
+
+  table{width:100%;border-collapse:collapse;}
+  thead tr{border-bottom:1px solid rgba(255,215,100,.08);}
+  th{font-size:8px;letter-spacing:3px;color:rgba(255,215,100,.3);text-transform:uppercase;padding:10px 14px;text-align:left;font-weight:600;}
+  tbody tr{border-bottom:1px solid rgba(255,255,255,.03);transition:background .15s;}
+  tbody tr:hover{background:rgba(255,215,100,.03);}
+  td{padding:11px 14px;font-size:13px;font-family:'Crimson Text',serif;color:rgba(255,255,255,.7);}
+  td.username{color:#ffd764;font-family:'Cinzel',serif;font-size:12px;}
+
+  /* BADGES */
+  .badge{display:inline-block;font-size:8px;letter-spacing:1px;padding:2px 7px;border-radius:3px;font-weight:700;font-family:'Cinzel',serif;}
+  .badge-verified{background:rgba(76,255,145,.15);color:#4cff91;border:1px solid rgba(76,255,145,.3);}
+  .badge-pending{background:rgba(255,215,100,.15);color:#ffd764;border:1px solid rgba(255,215,100,.3);}
+  .badge-unverified{background:rgba(255,255,255,.07);color:rgba(255,255,255,.4);border:1px solid rgba(255,255,255,.1);}
+  .badge-rejected{background:rgba(255,68,68,.12);color:#ff6b6b;border:1px solid rgba(255,68,68,.2);}
+  .badge-banned{background:#c0392b;color:#fff;}
+  .badge-admin{background:rgba(255,215,100,.2);color:#ffd764;border:1px solid rgba(255,215,100,.4);}
+  .vip-Bronze{background:#cd7f32;color:#fff;} .vip-Silver{background:#aaa;color:#fff;} .vip-Gold{background:#c9a227;color:#1a0a00;} .vip-Platinum{background:#e5e4e2;color:#333;} .vip-Diamond{background:linear-gradient(135deg,#b9f2ff,#8866ff);color:#fff;}
+
+  /* BUTTONS */
+  .btn{padding:6px 14px;border:none;border-radius:4px;font-family:'Cinzel',serif;font-size:9px;letter-spacing:2px;cursor:pointer;transition:all .2s;}
+  .btn-approve{background:rgba(76,255,145,.15);color:#4cff91;border:1px solid rgba(76,255,145,.3);}
+  .btn-approve:hover{background:rgba(76,255,145,.3);}
+  .btn-reject{background:rgba(255,68,68,.12);color:#ff6b6b;border:1px solid rgba(255,68,68,.2);}
+  .btn-reject:hover{background:rgba(255,68,68,.25);}
+  .btn-ban{background:rgba(255,100,50,.12);color:#ff6b6b;border:1px solid rgba(255,68,68,.2);}
+  .btn-unban{background:rgba(76,255,145,.08);color:#4cff91;border:1px solid rgba(76,255,145,.2);}
+  .btn-view{background:rgba(93,173,226,.1);color:#5dade2;border:1px solid rgba(93,173,226,.2);}
+  .btn-view:hover{background:rgba(93,173,226,.2);}
+  .btn-primary{background:linear-gradient(135deg,#c9a227,#ffd764);color:#1a0a00;font-weight:700;}
+
+  /* PAGINATION */
+  .pagination{display:flex;gap:8px;justify-content:center;margin-top:16px;}
+  .pg-btn{background:#0d0600;border:1px solid rgba(255,215,100,.15);color:rgba(255,215,100,.5);padding:6px 14px;border-radius:4px;cursor:pointer;font-family:'Cinzel',serif;font-size:10px;transition:all .2s;}
+  .pg-btn:hover,.pg-btn.active{border-color:#ffd764;color:#ffd764;}
+  .pg-btn:disabled{opacity:.3;cursor:not-allowed;}
+
+  /* MODAL */
+  .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.8);display:flex;align-items:center;justify-content:center;z-index:200;}
+  .modal-overlay.hidden{display:none;}
+  .modal-box{background:#0d0600;border:1px solid rgba(255,215,100,.2);border-radius:12px;padding:28px;max-width:600px;width:90vw;max-height:85vh;overflow-y:auto;}
+  .modal-title{font-size:16px;color:#ffd764;letter-spacing:2px;margin-bottom:18px;}
+  .id-images{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px;}
+  .id-img-wrap{border:1px solid rgba(255,255,255,.08);border-radius:8px;overflow:hidden;background:#060300;}
+  .id-img-label{font-size:9px;letter-spacing:2px;color:rgba(255,215,100,.4);padding:8px 12px;border-bottom:1px solid rgba(255,255,255,.06);}
+  .id-img-wrap img{width:100%;display:block;max-height:200px;object-fit:contain;}
+  .id-info{font-family:'Crimson Text',serif;font-size:13px;color:rgba(255,255,255,.5);margin-bottom:6px;}
+  .id-info strong{color:#f0f0f0;}
+  .modal-actions{display:flex;gap:10px;margin-top:20px;}
+  .btn-close{background:rgba(255,255,255,.06);color:rgba(255,255,255,.5);border:1px solid rgba(255,255,255,.1);}
+
+  /* LOADING */
+  .loading-row td{text-align:center;padding:40px;color:rgba(255,215,100,.3);font-style:italic;}
+  .spinner{display:inline-block;width:20px;height:20px;border:2px solid rgba(255,215,100,.15);border-top-color:#ffd764;border-radius:50%;animation:spin .8s linear infinite;margin-right:8px;vertical-align:middle;}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  .empty-row td{text-align:center;padding:40px;color:rgba(255,255,255,.2);font-family:'Crimson Text',serif;font-style:italic;}
+  .toast{position:fixed;top:60px;right:20px;background:#0d0600;border:1px solid rgba(255,215,100,.3);border-radius:6px;padding:10px 20px;color:#ffd764;font-size:12px;z-index:500;transform:translateY(-80px);transition:transform .3s;pointer-events:none;}
+  .toast.show{transform:translateY(0);}
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div style="display:flex;align-items:center;">
+    <div class="nav-logo">♠ BLACKJACK</div>
+    <span class="nav-badge">ADMIN</span>
+  </div>
+  <div class="nav-right">
+    <a class="nav-link" href="blackjack.html">← Back to Game</a>
+    <span class="nav-link" onclick="logout()">Sign Out</span>
+  </div>
+</nav>
+
+<div class="layout">
+  <aside class="sidebar">
+    <div class="sidebar-item active" onclick="showPage('dashboard')" id="nav-dashboard">
+      <span class="sidebar-icon">📊</span> Dashboard
+    </div>
+    <div class="sidebar-item" onclick="showPage('users')" id="nav-users">
+      <span class="sidebar-icon">👥</span> Users
+    </div>
+    <div class="sidebar-item" onclick="showPage('verification')" id="nav-verification">
+      <span class="sidebar-icon">🪪</span> Verification
+    </div>
+    <div class="sidebar-item" onclick="showPage('banned')" id="nav-banned">
+      <span class="sidebar-icon">🚫</span> Banned
+    </div>
+    <div class="sidebar-item" onclick="showPage('tournaments')" id="nav-tournaments">
+      <span class="sidebar-icon">🏆</span> Tournaments
+    </div>
+    <div class="sidebar-item" onclick="showPage('campaigns')" id="nav-campaigns">
+      <span class="sidebar-icon">📧</span> Campaigns
+    </div>
+  </aside>
+
+  <main class="main">
+
+    <!-- Dashboard -->
+    <div class="page active" id="page-dashboard">
+      <div class="page-title">Dashboard</div>
+      <div class="page-sub">Overview of your casino</div>
+      <div class="stats-grid" id="statsGrid">
+        <div class="stat-box"><div class="spinner"></div></div>
+      </div>
+    </div>
+
+    <!-- Users -->
+    <div class="page" id="page-users">
+      <div class="page-title">All Users</div>
+      <div class="page-sub">Search, manage and review all registered players</div>
+      <div class="table-wrap">
+        <div class="table-header">
+          <div class="table-title">Players</div>
+          <input class="search-box" id="userSearch" placeholder="Search username or email..." oninput="searchUsers()"/>
+        </div>
+        <table><thead><tr>
+          <th>Username</th><th>Email</th><th>Balance</th><th>Tier</th><th>Status</th><th>Hands</th><th>Joined</th><th>Actions</th>
+        </tr></thead>
+        <tbody id="usersBody"><tr class="loading-row"><td colspan="8"><span class="spinner"></span>Loading...</td></tr></tbody></table>
+      </div>
+      <div class="pagination" id="usersPagination"></div>
+    </div>
+
+    <!-- Verification -->
+    <div class="page" id="page-verification">
+      <div class="page-title">ID Verification</div>
+      <div class="page-sub">Review submitted identity documents</div>
+      <div class="table-wrap">
+        <table><thead><tr>
+          <th>Username</th><th>Email</th><th>Date of Birth</th><th>Submitted</th><th>Status</th><th>Actions</th>
+        </tr></thead>
+        <tbody id="verifyBody"><tr class="loading-row"><td colspan="6"><span class="spinner"></span>Loading...</td></tr></tbody>
+      </div>
+    </div>
+
+    <!-- Banned -->
+    <div class="page" id="page-banned">
+      <div class="page-title">Banned Users</div>
+      <div class="page-sub">Currently banned accounts</div>
+      <div class="table-wrap">
+        <table><thead><tr>
+          <th>Username</th><th>Email</th><th>Balance</th><th>Joined</th><th>Actions</th>
+        </tr></thead>
+        <tbody id="bannedBody"><tr class="loading-row"><td colspan="5"><span class="spinner"></span>Loading...</td></tr></tbody>
+      </div>
+    </div>
+
+    <!-- Tournaments -->
+    <div class="page" id="page-tournaments">
+      <div class="page-title">Tournaments</div>
+      <div class="page-sub">Create and manage tournaments</div>
+      <div class="table-wrap" style="padding:20px;margin-bottom:20px;">
+        <div class="table-title" style="margin-bottom:16px;">CREATE NEW TOURNAMENT</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+          <div><label style="font-size:9px;letter-spacing:2px;color:rgba(255,215,100,.4);display:block;margin-bottom:6px;">TOURNAMENT NAME</label>
+            <input class="search-box" id="tName" placeholder="e.g. Saturday Night Showdown" style="width:100%;"/></div>
+          <div><label style="font-size:9px;letter-spacing:2px;color:rgba(255,215,100,.4);display:block;margin-bottom:6px;">TYPE</label>
+            <select class="search-box" id="tType" style="width:100%;background:#060300;">
+              <option value="daily">Daily</option><option value="weekly">Weekly</option><option value="hourly">Hourly</option>
+            </select></div>
+          <div><label style="font-size:9px;letter-spacing:2px;color:rgba(255,215,100,.4);display:block;margin-bottom:6px;">BUY-IN ($)</label>
+            <input class="search-box" id="tBuyIn" type="number" placeholder="500" value="500" style="width:100%;"/></div>
+          <div><label style="font-size:9px;letter-spacing:2px;color:rgba(255,215,100,.4);display:block;margin-bottom:6px;">MAX PLAYERS</label>
+            <input class="search-box" id="tMax" type="number" placeholder="100" value="100" style="width:100%;"/></div>
+          <div><label style="font-size:9px;letter-spacing:2px;color:rgba(255,215,100,.4);display:block;margin-bottom:6px;">STARTS AT</label>
+            <input class="search-box" id="tStart" type="datetime-local" style="width:100%;"/></div>
+          <div><label style="font-size:9px;letter-spacing:2px;color:rgba(255,215,100,.4);display:block;margin-bottom:6px;">ENDS AT</label>
+            <input class="search-box" id="tEnd" type="datetime-local" style="width:100%;"/></div>
+        </div>
+        <button class="btn btn-primary" onclick="createTournament()">+ Create Tournament</button>
+      </div>
+      <div class="table-wrap">
+        <table><thead><tr><th>Name</th><th>Type</th><th>Buy-In</th><th>Prize Pool</th><th>Players</th><th>Status</th><th>Start</th><th>End</th></tr></thead>
+        <tbody id="tournBody"><tr class="loading-row"><td colspan="8"><span class="spinner"></span>Loading...</td></tr></tbody></table>
+      </div>
+    </div>
+
+    <!-- Email Campaigns -->
+    <div class="page" id="page-campaigns">
+      <div class="page-title">Email Campaigns</div>
+      <div class="page-sub">Send targeted email campaigns to players</div>
+      <div class="table-wrap" style="padding:24px;margin-bottom:20px;">
+        <div class="table-title" style="margin-bottom:16px;">COMPOSE CAMPAIGN</div>
+        <div style="margin-bottom:12px;">
+          <label style="font-size:9px;letter-spacing:2px;color:rgba(255,215,100,.4);display:block;margin-bottom:6px;">AUDIENCE SEGMENT</label>
+          <select class="search-box" id="campSegment" style="width:300px;background:#060300;">
+            <option value="all">All Players</option>
+            <option value="inactive">Inactive (7+ days)</option>
+            <option value="vip">VIP Players (Gold+)</option>
+          </select>
+        </div>
+        <div style="margin-bottom:12px;">
+          <label style="font-size:9px;letter-spacing:2px;color:rgba(255,215,100,.4);display:block;margin-bottom:6px;">SUBJECT LINE</label>
+          <input class="search-box" id="campSubject" placeholder="e.g. 🃏 Claim your weekly bonus!" style="width:100%;"/>
+        </div>
+        <div style="margin-bottom:16px;">
+          <label style="font-size:9px;letter-spacing:2px;color:rgba(255,215,100,.4);display:block;margin-bottom:6px;">HTML BODY (use {{username}} for personalization)</label>
+          <textarea class="search-box" id="campHtml" rows="8" placeholder="<p>Hi {{username}},</p><p>Come back and play!</p>" style="width:100%;resize:vertical;font-family:monospace;font-size:12px;"></textarea>
+        </div>
+        <div style="display:flex;gap:12px;">
+          <button class="btn btn-primary" onclick="sendCampaign()">📧 Send Campaign</button>
+          <button class="btn btn-view" onclick="sendReminders()">🔥 Send Streak Reminders</button>
+        </div>
+        <div id="campResult" style="margin-top:14px;font-family:'Crimson Text',serif;font-size:13px;color:rgba(255,255,255,.4);"></div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- ID Review Modal -->
+<div class="modal-overlay hidden" id="verifyModal">
+  <div class="modal-box">
+    <div class="modal-title" id="modalUsername">Review Identity</div>
+    <div id="modalContent"></div>
+    <div class="modal-actions">
+      <button class="btn btn-approve" id="modalApprove" onclick="verifyAction('approve')">✓ Approve</button>
+      <button class="btn btn-reject"  id="modalReject"  onclick="verifyAction('reject')">✗ Reject</button>
+      <button class="btn btn-close"   onclick="closeModal()">Close</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const API = 'http://localhost:4000/api';
+const token = localStorage.getItem('bj_token');
+if (!token) window.location.href = 'index.html';
+
+let currentPage = 1;
+let searchTimer = null;
+let modalUserId = null;
+
+function logout(){ localStorage.removeItem('bj_token'); localStorage.removeItem('bj_user'); window.location.href='index.html'; }
+function showToast(msg, ok=true){ const t=document.getElementById('toast'); t.textContent=msg; t.style.color=ok?'#4cff91':'#ff6b6b'; t.style.borderColor=ok?'rgba(76,255,145,.3)':'rgba(255,68,68,.2)'; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2500); }
+
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.sidebar-item').forEach(s=>s.classList.remove('active'));
+  document.getElementById('page-'+name).classList.add('active');
+  document.getElementById('nav-'+name).classList.add('active');
+  if (name==='dashboard')   loadStats();
+  if (name==='users')       loadUsers(1);
+  if (name==='verification') loadVerification();
+  if (name==='banned')      loadBanned();
+  if (name==='tournaments') loadTournaments();
+  if (name==='campaigns')   {} // no auto-load needed
+}
+
+// ── DASHBOARD ────────────────────────────────────────
+async function loadStats() {
+  try {
+    const res = await fetch(`${API}/admin/stats`, {headers:{Authorization:'Bearer '+token}});
+    if (res.status===403){document.body.innerHTML='<div style="text-align:center;padding:80px;color:#ff6b6b;font-family:Cinzel,serif;">Access denied — admin only</div>'; return;}
+    const d = await res.json();
+    document.getElementById('statsGrid').innerHTML = `
+      <div class="stat-box"><div class="stat-box-val blue">${d.totalUsers}</div><div class="stat-box-label">Total Players</div></div>
+      <div class="stat-box"><div class="stat-box-val">${d.signupsToday}</div><div class="stat-box-label">Joined Today</div></div>
+      <div class="stat-box"><div class="stat-box-val green">${d.verified}</div><div class="stat-box-label">Verified</div></div>
+      <div class="stat-box"><div class="stat-box-val" style="color:#ffd764">${d.pending}</div><div class="stat-box-label">Pending Review</div></div>
+      <div class="stat-box"><div class="stat-box-val red">${d.banned}</div><div class="stat-box-label">Banned</div></div>
+      <div class="stat-box"><div class="stat-box-val green">$${Number(d.totalBalance||0).toLocaleString()}</div><div class="stat-box-label">Total Chips in Play</div></div>
+      <div class="stat-box"><div class="stat-box-val blue">$${Number(d.totalWagered||0).toLocaleString()}</div><div class="stat-box-label">Total Wagered</div></div>
+    `;
+  } catch(e) { showToast('Failed to load stats', false); }
+}
+
+// ── USERS ─────────────────────────────────────────────
+async function loadUsers(page=1) {
+  currentPage = page;
+  const search = document.getElementById('userSearch').value.trim();
+  const body = document.getElementById('usersBody');
+  body.innerHTML = '<tr class="loading-row"><td colspan="8"><span class="spinner"></span>Loading...</td></tr>';
+  try {
+    const res = await fetch(`${API}/admin/users?page=${page}&search=${encodeURIComponent(search)}`, {headers:{Authorization:'Bearer '+token}});
+    const d = await res.json();
+    if (!d.users.length) { body.innerHTML='<tr class="empty-row"><td colspan="8">No users found</td></tr>'; return; }
+    body.innerHTML = d.users.map(u => `
+      <tr>
+        <td class="username">${esc(u.username)} ${u.is_admin?'<span class="badge badge-admin">ADMIN</span>':''}</td>
+        <td style="font-family:'Crimson Text',serif;font-size:12px;">${esc(u.email)}</td>
+        <td style="color:#4cff91;">$${u.balance.toLocaleString()}</td>
+        <td><span class="badge vip-${u.vip_tier}">${u.vip_tier}</span></td>
+        <td><span class="badge badge-${u.is_banned?'banned':u.verify_status}">${u.is_banned?'BANNED':u.verify_status}</span></td>
+        <td>${u.total_hands}</td>
+        <td style="font-size:11px;">${new Date(u.created_at).toLocaleDateString()}</td>
+        <td style="display:flex;gap:6px;flex-wrap:wrap;">
+          ${!u.is_banned?`<button class="btn btn-ban" onclick="banUser(${u.id},true,'${esc(u.username)}')">Ban</button>`:
+                         `<button class="btn btn-unban" onclick="banUser(${u.id},false,'${esc(u.username)}')">Unban</button>`}
+        </td>
+      </tr>`).join('');
+    // Pagination
+    const pg = document.getElementById('usersPagination');
+    pg.innerHTML = '';
+    for (let i=1;i<=d.pages;i++) {
+      const b=document.createElement('button'); b.className='pg-btn'+(i===page?' active':''); b.textContent=i;
+      b.onclick=()=>loadUsers(i); pg.appendChild(b);
+    }
+  } catch { showToast('Failed to load users', false); }
+}
+
+function searchUsers(){ clearTimeout(searchTimer); searchTimer=setTimeout(()=>loadUsers(1),400); }
+
+async function banUser(id, ban, username) {
+  if (!confirm(`${ban?'Ban':'Unban'} ${username}?`)) return;
+  try {
+    const res = await fetch(`${API}/admin/users/${id}/ban`, {method:'PUT',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:JSON.stringify({ban})});
+    if (res.ok) { showToast(`${username} ${ban?'banned':'unbanned'}`); loadUsers(currentPage); }
+    else showToast('Action failed', false);
+  } catch { showToast('Server error', false); }
+}
+
+// ── VERIFICATION ──────────────────────────────────────
+async function loadVerification() {
+  const body = document.getElementById('verifyBody');
+  body.innerHTML = '<tr class="loading-row"><td colspan="6"><span class="spinner"></span>Loading...</td></tr>';
+  try {
+    const res = await fetch(`${API}/admin/users?page=1&search=`, {headers:{Authorization:'Bearer '+token}});
+    const d = await res.json();
+    const pending = d.users.filter(u => u.verify_status==='pending' || u.verify_status==='verified' || u.verify_status==='rejected');
+    if (!pending.length) { body.innerHTML='<tr class="empty-row"><td colspan="6">No verification submissions yet</td></tr>'; return; }
+    body.innerHTML = pending.map(u => `
+      <tr>
+        <td class="username">${esc(u.username)}</td>
+        <td style="font-family:'Crimson Text',serif;font-size:12px;">${esc(u.email)}</td>
+        <td style="font-family:'Crimson Text',serif;">—</td>
+        <td style="font-size:11px;">${new Date(u.created_at).toLocaleDateString()}</td>
+        <td><span class="badge badge-${u.verify_status}">${u.verify_status}</span></td>
+        <td><button class="btn btn-view" onclick="openVerifyModal(${u.id},'${esc(u.username)}')">Review ID</button></td>
+      </tr>`).join('');
+  } catch { showToast('Failed to load', false); }
+}
+
+async function openVerifyModal(userId, username) {
+  modalUserId = userId;
+  document.getElementById('modalUsername').textContent = `Review: ${username}`;
+  document.getElementById('modalContent').innerHTML = '<div style="text-align:center;padding:20px;"><span class="spinner"></span> Loading documents...</div>';
+  document.getElementById('verifyModal').classList.remove('hidden');
+  try {
+    const res = await fetch(`${API}/admin/verification/${userId}`, {headers:{Authorization:'Bearer '+token}});
+    const d = await res.json();
+    const dob = d.date_of_birth ? new Date(d.date_of_birth).toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'}) : '—';
+    document.getElementById('modalContent').innerHTML = `
+      <div class="id-info"><strong>Email:</strong> ${esc(d.email)}</div>
+      <div class="id-info"><strong>Date of Birth:</strong> ${dob}</div>
+      <div class="id-info" style="margin-bottom:16px;"><strong>Status:</strong> <span class="badge badge-${d.verify_status}">${d.verify_status}</span></div>
+      <div class="id-images">
+        <div class="id-img-wrap">
+          <div class="id-img-label">🪪 Government ID</div>
+          ${d.id_document ? `<img src="${d.id_document}" alt="ID Document"/>` : '<div style="padding:40px;text-align:center;color:rgba(255,255,255,.3);">No document uploaded</div>'}
+        </div>
+        <div class="id-img-wrap">
+          <div class="id-img-label">🤳 Selfie Photo</div>
+          ${d.selfie_photo ? `<img src="${d.selfie_photo}" alt="Selfie"/>` : '<div style="padding:40px;text-align:center;color:rgba(255,255,255,.3);">No selfie uploaded</div>'}
+        </div>
+      </div>`;
+  } catch { document.getElementById('modalContent').innerHTML='<p style="color:#ff6b6b;font-family:Crimson Text,serif;">Failed to load documents.</p>'; }
+}
+
+async function verifyAction(action) {
+  if (!modalUserId) return;
+  try {
+    const res = await fetch(`${API}/admin/users/${modalUserId}/verify`, {method:'PUT',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:JSON.stringify({action})});
+    if (res.ok) { showToast(action==='approve'?'User approved ✓':'User rejected'); closeModal(); loadVerification(); }
+    else showToast('Action failed', false);
+  } catch { showToast('Server error', false); }
+}
+
+function closeModal() { document.getElementById('verifyModal').classList.add('hidden'); modalUserId=null; }
+
+// ── BANNED ────────────────────────────────────────────
+async function loadBanned() {
+  const body = document.getElementById('bannedBody');
+  body.innerHTML = '<tr class="loading-row"><td colspan="5"><span class="spinner"></span>Loading...</td></tr>';
+  try {
+    const res = await fetch(`${API}/admin/users?page=1`, {headers:{Authorization:'Bearer '+token}});
+    const d = await res.json();
+    const banned = d.users.filter(u=>u.is_banned);
+    if (!banned.length) { body.innerHTML='<tr class="empty-row"><td colspan="5">No banned users</td></tr>'; return; }
+    body.innerHTML = banned.map(u=>`
+      <tr>
+        <td class="username">${esc(u.username)}</td>
+        <td style="font-family:'Crimson Text',serif;font-size:12px;">${esc(u.email)}</td>
+        <td style="color:#4cff91;">$${u.balance.toLocaleString()}</td>
+        <td style="font-size:11px;">${new Date(u.created_at).toLocaleDateString()}</td>
+        <td><button class="btn btn-unban" onclick="banUser(${u.id},false,'${esc(u.username)}')">Unban</button></td>
+      </tr>`).join('');
+  } catch { showToast('Failed to load', false); }
+}
+
+// ── TOURNAMENTS ──────────────────────────────────────
+async function loadTournaments() {
+  const body = document.getElementById('tournBody');
+  try {
+    const res = await fetch(`${API}/tournaments`, {headers:{Authorization:'Bearer '+token}});
+    const d = await res.json();
+    const all = [...(d.active||[]), ...(d.recent||[])];
+    if (!all.length) { body.innerHTML='<tr class="empty-row"><td colspan="8">No tournaments yet</td></tr>'; return; }
+    const statusBadge = s => ({upcoming:'badge-pending',active:'badge-verified',ended:'badge-unverified'}[s]||'');
+    body.innerHTML = all.map(t=>`<tr>
+      <td class="username">${esc(t.name)}</td>
+      <td style="font-family:'Crimson Text',serif;">${t.type}</td>
+      <td style="color:#ffd764;">$${Number(t.buy_in).toLocaleString()}</td>
+      <td style="color:#4cff91;">$${Number(t.prize_pool).toLocaleString()}</td>
+      <td>${t.entrant_count||0}/${t.max_players}</td>
+      <td><span class="badge ${statusBadge(t.status)}">${t.status.toUpperCase()}</span></td>
+      <td style="font-size:11px;">${new Date(t.starts_at).toLocaleDateString()}</td>
+      <td style="font-size:11px;">${new Date(t.ends_at).toLocaleDateString()}</td>
+    </tr>`).join('');
+  } catch { showToast('Failed to load tournaments', false); }
+}
+
+async function createTournament() {
+  const name = document.getElementById('tName').value.trim();
+  const type = document.getElementById('tType').value;
+  const buyIn = parseInt(document.getElementById('tBuyIn').value)||500;
+  const maxPlayers = parseInt(document.getElementById('tMax').value)||100;
+  const startsAt = document.getElementById('tStart').value;
+  const endsAt = document.getElementById('tEnd').value;
+  if (!name || !startsAt || !endsAt) { showToast('Fill in name, start and end time', false); return; }
+  try {
+    const res = await fetch(`${API}/admin/tournaments`, {method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:JSON.stringify({name,type,buyIn,startsAt,endsAt,maxPlayers})});
+    const d = await res.json();
+    if (d.success) { showToast('✅ Tournament created!'); loadTournaments(); }
+    else showToast(d.error||'Failed', false);
+  } catch { showToast('Server error', false); }
+}
+
+// ── EMAIL CAMPAIGNS ───────────────────────────────────
+async function sendCampaign() {
+  const segment = document.getElementById('campSegment').value;
+  const subject = document.getElementById('campSubject').value.trim();
+  const html    = document.getElementById('campHtml').value.trim();
+  if (!subject || !html) { showToast('Subject and body required', false); return; }
+  if (!confirm(`Send to: ${segment} players. Continue?`)) return;
+  document.getElementById('campResult').textContent = '⏳ Sending…';
+  try {
+    const res = await fetch(`${API}/admin/send-campaign`, {method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:JSON.stringify({segment,subject,html})});
+    const d = await res.json();
+    if (d.success) { showToast(`✅ Sent to ${d.sent} players`); document.getElementById('campResult').textContent = `✅ Sent to ${d.sent} player(s).`; }
+    else { showToast(d.error||'Failed', false); document.getElementById('campResult').textContent = ''; }
+  } catch { showToast('Server error', false); }
+}
+
+async function sendReminders() {
+  if (!confirm('Send daily-bonus streak reminders to players at risk of losing their streak?')) return;
+  document.getElementById('campResult').textContent = '⏳ Sending reminders…';
+  try {
+    const res = await fetch(`${API}/admin/send-reminders`, {method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token}});
+    const d = await res.json();
+    if (d.success) { showToast(`✅ Sent ${d.sent} reminder emails`); document.getElementById('campResult').textContent = `✅ Streak reminders sent to ${d.sent} player(s).`; }
+    else showToast(d.error||'Failed', false);
+  } catch { showToast('Server error', false); }
+}
+
+function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// Check admin access on load
+async function init() {
+  const res = await fetch(`${API}/admin/stats`, {headers:{Authorization:'Bearer '+token}});
+  if (res.status===401) { window.location.href='index.html'; return; }
+  if (res.status===403) { document.body.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:Cinzel,serif;color:#ff6b6b;font-size:20px;">⛔ Admin access only</div>'; return; }
+  loadStats();
+}
+
+init();
+</script>
+</body>
+</html>

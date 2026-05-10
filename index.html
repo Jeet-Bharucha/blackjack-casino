@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Blackjack — Sign In</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=Cinzel:wght@400;600;700&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    min-height: 100vh;
+    background: #0d0500;
+    font-family: 'Cinzel', serif;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background:
+      radial-gradient(ellipse 70% 60% at 50% 40%, rgba(0,70,15,0.3) 0%, transparent 70%),
+      radial-gradient(ellipse 100% 100% at 50% 100%, rgba(50,20,0,0.4) 0%, transparent 60%);
+    pointer-events: none;
+  }
+
+  .bg-cards { position: fixed; inset: 0; pointer-events: none; overflow: hidden; }
+  .bg-card {
+    position: absolute; width: 60px; height: 85px;
+    background: rgba(254,253,248,0.04); border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 6px; animation: floatCard linear infinite;
+  }
+  @keyframes floatCard {
+    0%   { transform: translateY(110vh) rotate(var(--rot)); opacity: 0; }
+    10%  { opacity: 1; } 90% { opacity: 1; }
+    100% { transform: translateY(-10vh) rotate(var(--rot)); opacity: 0; }
+  }
+
+  .auth-card {
+    position: relative; z-index: 10;
+    width: min(440px, 94vw);
+    background: rgba(12,6,0,0.92);
+    border: 1px solid rgba(255,215,100,0.2);
+    border-radius: 16px;
+    padding: 44px 40px 36px;
+    box-shadow: 0 0 0 1px rgba(255,215,100,0.06), 0 40px 80px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.05);
+    backdrop-filter: blur(10px);
+  }
+
+  .logo { text-align: center; margin-bottom: 32px; }
+  .logo-suit { font-size: 40px; display: block; margin-bottom: 8px; filter: drop-shadow(0 0 12px rgba(255,215,100,0.5)); }
+  .logo-title { font-size: 28px; font-weight: 900; letter-spacing: 6px; color: #ffd764; text-shadow: 0 0 20px rgba(255,215,100,0.4); }
+  .logo-sub { font-size: 10px; letter-spacing: 3px; color: rgba(255,215,100,0.4); margin-top: 4px; font-family: 'Crimson Text', serif; font-style: italic; }
+
+  .tabs { display: flex; border-bottom: 1px solid rgba(255,215,100,0.15); margin-bottom: 28px; }
+  .tab { flex: 1; padding: 10px; text-align: center; font-size: 11px; letter-spacing: 3px; color: rgba(255,215,100,0.35); cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.2s; margin-bottom: -1px; }
+  .tab.active { color: #ffd764; border-bottom-color: #ffd764; }
+
+  .form { display: none; flex-direction: column; gap: 16px; }
+  .form.active { display: flex; }
+
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field label { font-size: 9px; letter-spacing: 3px; color: rgba(255,215,100,0.5); text-transform: uppercase; }
+  .field input {
+    background: rgba(255,255,255,0.04); border: 1px solid rgba(255,215,100,0.15);
+    border-radius: 6px; padding: 12px 14px; color: #f0f0f0;
+    font-family: 'Crimson Text', serif; font-size: 16px; outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  .field input:focus { border-color: rgba(255,215,100,0.5); box-shadow: 0 0 0 3px rgba(255,215,100,0.08); }
+  .field input::placeholder { color: rgba(255,255,255,0.2); }
+
+  .btn-submit {
+    margin-top: 4px; padding: 14px;
+    background: linear-gradient(135deg, #c9a227, #ffd764, #c9a227);
+    color: #1a0a00; border: none; border-radius: 6px;
+    font-family: 'Cinzel', serif; font-size: 12px; font-weight: 700; letter-spacing: 3px;
+    cursor: pointer; box-shadow: 0 4px 16px rgba(201,162,39,0.35); transition: all 0.2s;
+  }
+  .btn-submit:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(201,162,39,0.5); }
+  .btn-submit:active { transform: translateY(0); }
+  .btn-submit:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+  .error-msg { font-size: 12px; color: #ff6b6b; text-align: center; font-family: 'Crimson Text', serif; min-height: 18px; letter-spacing: 0.5px; }
+  .success-msg { font-size: 12px; color: #4cff91; text-align: center; font-family: 'Crimson Text', serif; letter-spacing: 0.5px; }
+
+  .divider { display: flex; align-items: center; gap: 12px; color: rgba(255,215,100,0.2); font-size: 10px; letter-spacing: 2px; }
+  .divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: rgba(255,215,100,0.1); }
+
+  .bonus-note { text-align: center; font-family: 'Crimson Text', serif; font-size: 13px; color: rgba(255,255,255,0.3); font-style: italic; }
+  .bonus-note span { color: #4cff91; font-style: normal; font-weight: 600; }
+
+  .forgot-link { text-align: right; font-size: 11px; color: rgba(255,215,100,0.4); font-family: 'Crimson Text', serif; cursor: pointer; transition: color 0.2s; }
+  .forgot-link:hover { color: #ffd764; }
+
+  .back-link { font-size: 11px; color: rgba(255,215,100,0.4); font-family: 'Crimson Text', serif; cursor: pointer; text-align: center; transition: color 0.2s; }
+  .back-link:hover { color: #ffd764; }
+
+  .reset-code-box {
+    background: rgba(76,255,145,0.06); border: 1px solid rgba(76,255,145,0.3);
+    border-radius: 8px; padding: 14px 16px; text-align: center;
+  }
+  .reset-code-label { font-size: 9px; letter-spacing: 2px; color: rgba(76,255,145,0.6); text-transform: uppercase; margin-bottom: 6px; }
+  .reset-code-value { font-size: 28px; font-weight: 700; color: #4cff91; font-family: 'Playfair Display', serif; letter-spacing: 8px; }
+  .reset-code-note { font-size: 11px; color: rgba(255,255,255,0.3); font-family: 'Crimson Text', serif; margin-top: 4px; font-style: italic; }
+</style>
+</head>
+<body>
+
+<div class="bg-cards" id="bgCards"></div>
+
+<div class="auth-card">
+  <div class="logo">
+    <span class="logo-suit">♠</span>
+    <div class="logo-title">BLACKJACK</div>
+    <div class="logo-sub">Casino Royale</div>
+  </div>
+
+  <div class="tabs" id="mainTabs">
+    <div class="tab active" onclick="switchTab('login')">Sign In</div>
+    <div class="tab" onclick="switchTab('register')">Register</div>
+  </div>
+
+  <!-- Login -->
+  <form class="form active" id="loginForm" onsubmit="handleLogin(event)">
+    <div class="field">
+      <label>Email</label>
+      <input type="email" id="loginEmail" placeholder="you@example.com" required autocomplete="email"/>
+    </div>
+    <div class="field">
+      <label>Password</label>
+      <input type="password" id="loginPassword" placeholder="••••••••" required autocomplete="current-password"/>
+    </div>
+    <div class="forgot-link" onclick="showForgot()">Forgot password?</div>
+    <div class="error-msg" id="loginError"></div>
+    <button class="btn-submit" type="submit" id="loginBtn">Enter the Table</button>
+  </form>
+
+  <!-- Register -->
+  <form class="form" id="registerForm" onsubmit="handleRegister(event)">
+    <div class="field">
+      <label>Username</label>
+      <input type="text" id="regUsername" placeholder="HighRoller99" required minlength="3" maxlength="20" autocomplete="username"/>
+    </div>
+    <div class="field">
+      <label>Email</label>
+      <input type="email" id="regEmail" placeholder="you@example.com" required autocomplete="email"/>
+    </div>
+    <div class="field">
+      <label>Date of Birth</label>
+      <input type="date" id="regDob" required max="" autocomplete="bday"/>
+    </div>
+    <div class="field">
+      <label>Password</label>
+      <input type="password" id="regPassword" placeholder="Min. 6 characters" required minlength="6" autocomplete="new-password"/>
+    </div>
+    <div class="error-msg" id="registerError"></div>
+    <button class="btn-submit" type="submit" id="registerBtn">Create Account</button>
+    <div class="divider">welcome bonus</div>
+    <div class="bonus-note">Start with <span>$500</span> in chips — free · Must be 21+</div>
+  </form>
+
+  <!-- Forgot Password — Step 1: enter email -->
+  <form class="form" id="forgotForm" onsubmit="handleForgot(event)">
+    <div style="text-align:center;margin-bottom:4px;color:#ffd764;letter-spacing:2px;font-size:13px;">Reset Password</div>
+    <div class="field">
+      <label>Your Email</label>
+      <input type="email" id="forgotEmail" placeholder="you@example.com" required autocomplete="email"/>
+    </div>
+    <div class="error-msg" id="forgotError"></div>
+    <button class="btn-submit" type="submit" id="forgotBtn">Send Reset Code</button>
+    <div class="back-link" onclick="backToLogin()">← Back to Sign In</div>
+  </form>
+
+  <!-- Forgot Password — Step 2: code shown + new password -->
+  <div class="form" id="resetForm">
+    <div style="text-align:center;margin-bottom:4px;color:#ffd764;letter-spacing:2px;font-size:13px;">New Password</div>
+    <div class="reset-code-box">
+      <div class="reset-code-label">Your Reset Code</div>
+      <div class="reset-code-value" id="shownCode">——</div>
+      <div class="reset-code-note">Copy this code — it expires in 15 minutes</div>
+    </div>
+    <div class="field">
+      <label>Enter Code</label>
+      <input type="text" id="resetCode" placeholder="6-digit code" maxlength="6" autocomplete="off"/>
+    </div>
+    <div class="field">
+      <label>New Password</label>
+      <input type="password" id="resetPassword" placeholder="Min. 6 characters" minlength="6" autocomplete="new-password"/>
+    </div>
+    <div class="error-msg" id="resetError"></div>
+    <div class="success-msg" id="resetSuccess"></div>
+    <button class="btn-submit" id="resetBtn" onclick="handleReset()">Update Password</button>
+    <div class="back-link" onclick="backToLogin()">← Back to Sign In</div>
+  </div>
+</div>
+
+<script>
+  const API = 'http://localhost:4000/api';
+  let forgotEmail = '';
+
+  if (localStorage.getItem('bj_token')) window.location.href = 'blackjack.html';
+
+  // Floating background cards
+  const suits = ['♠','♥','♦','♣'];
+  const bgCards = document.getElementById('bgCards');
+  for (let i = 0; i < 12; i++) {
+    const c = document.createElement('div');
+    c.className = 'bg-card';
+    c.style.left = Math.random() * 100 + 'vw';
+    c.style.setProperty('--rot', (Math.random() * 60 - 30) + 'deg');
+    c.style.animationDuration = (12 + Math.random() * 16) + 's';
+    c.style.animationDelay = (-Math.random() * 20) + 's';
+    c.style.fontSize = '24px';
+    c.style.display = 'flex';
+    c.style.alignItems = 'center';
+    c.style.justifyContent = 'center';
+    c.style.color = 'rgba(255,255,255,0.08)';
+    c.textContent = suits[Math.floor(Math.random() * 4)];
+    bgCards.appendChild(c);
+  }
+
+  function hideAll() {
+    ['loginForm','registerForm','forgotForm','resetForm'].forEach(id => document.getElementById(id).classList.remove('active'));
+  }
+
+  function switchTab(tab) {
+    document.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', (i === 0 && tab === 'login') || (i === 1 && tab === 'register')));
+    hideAll();
+    document.getElementById(tab === 'login' ? 'loginForm' : 'registerForm').classList.add('active');
+    document.getElementById('mainTabs').style.display = 'flex';
+    document.getElementById('loginError').textContent = '';
+    document.getElementById('registerError').textContent = '';
+  }
+
+  function showForgot() {
+    hideAll();
+    document.getElementById('mainTabs').style.display = 'none';
+    document.getElementById('forgotForm').classList.add('active');
+  }
+
+  function backToLogin() {
+    document.getElementById('mainTabs').style.display = 'flex';
+    hideAll();
+    document.getElementById('loginForm').classList.add('active');
+    document.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', i === 0));
+  }
+
+  async function handleLogin(e) {
+    e.preventDefault();
+    const btn = document.getElementById('loginBtn');
+    const errEl = document.getElementById('loginError');
+    errEl.textContent = ''; btn.disabled = true; btn.textContent = 'Signing in...';
+    try {
+      const res = await fetch(`${API}/login`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: document.getElementById('loginEmail').value, password: document.getElementById('loginPassword').value })
+      });
+      const data = await res.json();
+      if (!res.ok) { errEl.textContent = data.error; return; }
+      localStorage.setItem('bj_token', data.token);
+      localStorage.setItem('bj_user', JSON.stringify(data.user));
+      window.location.href = 'blackjack.html';
+    } catch { errEl.textContent = 'Cannot connect to server. Is it running?'; }
+    finally { btn.disabled = false; btn.textContent = 'Enter the Table'; }
+  }
+
+  // Set max date for DOB (must be 21+ years ago)
+  const maxDob = new Date(); maxDob.setFullYear(maxDob.getFullYear() - 21);
+  document.getElementById('regDob').max = maxDob.toISOString().split('T')[0];
+
+  async function handleRegister(e) {
+    e.preventDefault();
+    const btn = document.getElementById('registerBtn');
+    const errEl = document.getElementById('registerError');
+    errEl.textContent = ''; btn.disabled = true; btn.textContent = 'Creating account...';
+    try {
+      const res = await fetch(`${API}/register`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: document.getElementById('regUsername').value,
+          email: document.getElementById('regEmail').value,
+          dateOfBirth: document.getElementById('regDob').value,
+          password: document.getElementById('regPassword').value,
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) { errEl.textContent = data.error; return; }
+      localStorage.setItem('bj_token', data.token);
+      localStorage.setItem('bj_user', JSON.stringify(data.user));
+      // Redirect to age verification first
+      window.location.href = data.requiresVerification ? 'verify-age.html' : 'blackjack.html';
+    } catch { errEl.textContent = 'Cannot connect to server. Is it running?'; }
+    finally { btn.disabled = false; btn.textContent = 'Create Account'; }
+  }
+
+  async function handleForgot(e) {
+    e.preventDefault();
+    const btn = document.getElementById('forgotBtn');
+    const errEl = document.getElementById('forgotError');
+    errEl.textContent = ''; btn.disabled = true; btn.textContent = 'Sending...';
+    forgotEmail = document.getElementById('forgotEmail').value;
+    try {
+      const res = await fetch(`${API}/forgot-password`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: forgotEmail })
+      });
+      const data = await res.json();
+      if (!res.ok) { errEl.textContent = data.error; return; }
+      // Show the code (since no email service is configured)
+      document.getElementById('shownCode').textContent = data.resetCode;
+      hideAll();
+      document.getElementById('resetForm').classList.add('active');
+    } catch { errEl.textContent = 'Cannot connect to server. Is it running?'; }
+    finally { btn.disabled = false; btn.textContent = 'Send Reset Code'; }
+  }
+
+  async function handleReset() {
+    const btn = document.getElementById('resetBtn');
+    const errEl = document.getElementById('resetError');
+    const sucEl = document.getElementById('resetSuccess');
+    errEl.textContent = ''; sucEl.textContent = '';
+    const code = document.getElementById('resetCode').value.trim();
+    const newPassword = document.getElementById('resetPassword').value;
+    if (!code || !newPassword) { errEl.textContent = 'Please fill in all fields.'; return; }
+    btn.disabled = true; btn.textContent = 'Updating...';
+    try {
+      const res = await fetch(`${API}/reset-password`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: forgotEmail, code, newPassword })
+      });
+      const data = await res.json();
+      if (!res.ok) { errEl.textContent = data.error; return; }
+      sucEl.textContent = '✓ Password updated! Redirecting to sign in...';
+      setTimeout(backToLogin, 2000);
+    } catch { errEl.textContent = 'Cannot connect to server.'; }
+    finally { btn.disabled = false; btn.textContent = 'Update Password'; }
+  }
+</script>
+</body>
+</html>

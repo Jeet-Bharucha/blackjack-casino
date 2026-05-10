@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Blackjack — Profile</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=Cinzel:wght@400;600;700&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap');
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{min-height:100vh;background:#0d0500;font-family:'Cinzel',serif;color:#f0f0f0;}
+  body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellipse 70% 50% at 50% 20%,rgba(0,70,15,.25) 0%,transparent 70%);pointer-events:none;}
+
+  .nav{display:flex;align-items:center;justify-content:space-between;padding:14px 32px;background:rgba(10,5,0,.9);border-bottom:1px solid rgba(255,215,100,.1);position:sticky;top:0;z-index:50;backdrop-filter:blur(8px);}
+  .nav-logo{font-size:18px;font-weight:700;color:#ffd764;letter-spacing:4px;}
+  .nav-right{display:flex;gap:20px;}
+  .nav-link{font-size:10px;letter-spacing:2px;color:rgba(255,215,100,.5);text-decoration:none;cursor:pointer;transition:color .2s;}
+  .nav-link:hover{color:#ffd764;}
+
+  .page{max-width:860px;margin:0 auto;padding:44px 24px 60px;}
+
+  /* HERO */
+  .profile-hero{display:flex;align-items:center;gap:28px;margin-bottom:36px;background:rgba(255,215,100,.04);border:1px solid rgba(255,215,100,.15);border-radius:14px;padding:28px 32px;flex-wrap:wrap;}
+  .avatar-wrap{position:relative;flex-shrink:0;cursor:pointer;}
+  .avatar{width:88px;height:88px;border-radius:50%;background:linear-gradient(135deg,#c9a227,#ffd764);display:flex;align-items:center;justify-content:center;font-size:36px;font-weight:700;color:#1a0a00;box-shadow:0 0 24px rgba(255,215,100,.3);overflow:hidden;}
+  .avatar img{width:100%;height:100%;object-fit:cover;}
+  .avatar-edit{position:absolute;bottom:2px;right:2px;width:24px;height:24px;background:#ffd764;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;box-shadow:0 2px 6px rgba(0,0,0,.5);}
+  #avatarInput{display:none;}
+  .hero-info{flex:1;min-width:180px;}
+  .hero-name{font-size:26px;font-weight:700;color:#ffd764;letter-spacing:2px;margin-bottom:4px;}
+  .hero-joined{font-size:12px;color:rgba(255,255,255,.3);font-family:'Crimson Text',serif;margin-bottom:10px;}
+  .vip-badge{display:inline-block;font-size:10px;letter-spacing:3px;padding:3px 10px;border-radius:4px;font-weight:700;}
+  .vip-Bronze{background:#cd7f32;color:#fff;}.vip-Silver{background:#aaa;color:#fff;}.vip-Gold{background:#c9a227;color:#1a0a00;}.vip-Platinum{background:#e5e4e2;color:#333;}.vip-Diamond{background:linear-gradient(135deg,#b9f2ff,#8866ff);color:#fff;}
+  .hero-balance{font-size:32px;font-weight:700;color:#4cff91;font-family:'Playfair Display',serif;text-shadow:0 0 16px rgba(76,255,145,.3);}
+  .hero-balance-label{font-size:9px;letter-spacing:3px;color:rgba(255,255,255,.3);text-transform:uppercase;margin-bottom:4px;}
+
+  /* EDIT SECTION */
+  .edit-card{background:rgba(255,255,255,.03);border:1px solid rgba(255,215,100,.12);border-radius:12px;padding:22px 24px;margin-bottom:28px;}
+  .edit-title{font-size:11px;letter-spacing:3px;color:rgba(255,215,100,.5);text-transform:uppercase;margin-bottom:16px;}
+  .edit-row{display:flex;gap:12px;align-items:flex-end;}
+  .edit-field{flex:1;display:flex;flex-direction:column;gap:6px;}
+  .edit-label{font-size:9px;letter-spacing:2px;color:rgba(255,215,100,.45);text-transform:uppercase;}
+  .edit-input{background:rgba(255,255,255,.05);border:1px solid rgba(255,215,100,.15);border-radius:6px;padding:10px 14px;color:#f0f0f0;font-family:'Crimson Text',serif;font-size:15px;outline:none;transition:border-color .2s;}
+  .edit-input:focus{border-color:rgba(255,215,100,.5);box-shadow:0 0 0 3px rgba(255,215,100,.07);}
+  .edit-input::placeholder{color:rgba(255,255,255,.2);}
+  .btn-save{padding:10px 22px;background:linear-gradient(135deg,#c9a227,#ffd764,#c9a227);color:#1a0a00;border:none;border-radius:6px;font-family:'Cinzel',serif;font-size:11px;font-weight:700;letter-spacing:2px;cursor:pointer;box-shadow:0 4px 12px rgba(201,162,39,.3);transition:all .2s;white-space:nowrap;}
+  .btn-save:hover{transform:translateY(-1px);}
+  .btn-save:disabled{opacity:.4;cursor:not-allowed;transform:none;}
+  .edit-msg{font-size:12px;font-family:'Crimson Text',serif;margin-top:8px;min-height:16px;}
+  .edit-msg.ok{color:#4cff91;}.edit-msg.err{color:#ff6b6b;}
+
+  /* TIER SECTION */
+  .section-title{font-size:12px;letter-spacing:4px;color:rgba(255,215,100,.4);text-transform:uppercase;margin-bottom:16px;}
+  .tier-track{display:flex;gap:0;margin-bottom:28px;border-radius:10px;overflow:hidden;border:1px solid rgba(255,255,255,.06);}
+  .tier-step{flex:1;padding:16px 12px;text-align:center;background:rgba(255,255,255,.02);position:relative;transition:background .3s;}
+  .tier-step.active{background:rgba(255,215,100,.06);}
+  .tier-step.done{background:rgba(76,255,145,.04);}
+  .tier-step:not(:last-child)::after{content:'›';position:absolute;right:-8px;top:50%;transform:translateY(-50%);color:rgba(255,255,255,.15);font-size:18px;z-index:1;}
+  .tier-icon{font-size:22px;margin-bottom:5px;}
+  .tier-name{font-size:10px;letter-spacing:2px;color:rgba(255,215,100,.6);margin-bottom:4px;}
+  .tier-req{font-size:9px;color:rgba(255,255,255,.3);font-family:'Crimson Text',serif;}
+  .tier-step.done .tier-name{color:#4cff91;}.tier-step.active .tier-name{color:#ffd764;}
+  .tier-check{font-size:14px;margin-top:3px;}
+
+  .tier-progress-bar{margin-bottom:28px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);border-radius:10px;padding:18px 22px;}
+  .tpb-header{display:flex;justify-content:space-between;margin-bottom:10px;}
+  .tpb-tier{font-size:13px;color:#ffd764;letter-spacing:1px;}
+  .tpb-pts{font-size:12px;color:rgba(255,255,255,.4);font-family:'Crimson Text',serif;}
+  .tpb-bar{height:10px;background:rgba(255,255,255,.08);border-radius:5px;overflow:hidden;}
+  .tpb-fill{height:100%;border-radius:5px;transition:width 1s ease;}
+  .tpb-next{font-size:11px;color:rgba(255,255,255,.3);font-family:'Crimson Text',serif;margin-top:8px;text-align:right;}
+
+  /* STATS GRID */
+  .stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:28px;}
+  .stat-card{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);border-radius:10px;padding:16px;text-align:center;}
+  .stat-card-val{font-size:26px;font-weight:700;font-family:'Playfair Display',serif;color:#ffd764;margin-bottom:4px;}
+  .stat-card-val.green{color:#4cff91;}.stat-card-val.red{color:#ff6b6b;}.stat-card-val.blue{color:#5dade2;}
+  .stat-card-label{font-size:9px;letter-spacing:2px;color:rgba(255,255,255,.35);text-transform:uppercase;}
+
+  .winrate-row{display:flex;align-items:center;gap:12px;margin-bottom:28px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);border-radius:10px;padding:16px 20px;}
+  .winrate-label{font-size:10px;letter-spacing:2px;color:rgba(255,215,100,.5);min-width:80px;}
+  .winrate-bar{flex:1;height:8px;background:rgba(255,255,255,.08);border-radius:4px;overflow:hidden;}
+  .winrate-fill{height:100%;background:linear-gradient(to right,#27ae60,#4cff91);border-radius:4px;transition:width 1s ease;}
+  .winrate-pct{font-size:16px;font-weight:700;color:#4cff91;font-family:'Playfair Display',serif;min-width:50px;text-align:right;}
+
+  /* ACHIEVEMENTS */
+  .ach-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;}
+  .ach-card{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);border-radius:10px;padding:14px 16px;display:flex;align-items:center;gap:12px;transition:border-color .2s;}
+  .ach-card.unlocked{border-color:rgba(255,215,100,.3);background:rgba(255,215,100,.05);}
+  .ach-card.locked{opacity:.4;filter:grayscale(1);}
+  .ach-icon{font-size:24px;}
+  .ach-name{font-size:11px;color:#ffd764;letter-spacing:.5px;margin-bottom:2px;}
+  .ach-desc{font-size:10px;color:rgba(255,255,255,.4);font-family:'Crimson Text',serif;}
+  .ach-date{font-size:9px;color:rgba(255,215,100,.4);margin-top:3px;}
+
+  .toast{position:fixed;top:70px;left:50%;transform:translateX(-50%) translateY(-60px);background:rgba(20,10,0,.95);border:1px solid rgba(255,215,100,.3);border-radius:6px;padding:10px 24px;color:#ffd764;font-size:13px;letter-spacing:1px;z-index:400;transition:transform .3s;pointer-events:none;}
+  .toast.show{transform:translateX(-50%) translateY(0);}
+  .loading{text-align:center;padding:60px;color:rgba(255,215,100,.3);font-family:'Crimson Text',serif;font-style:italic;}
+  .spinner{width:32px;height:32px;border:2px solid rgba(255,215,100,.15);border-top-color:#ffd764;border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 16px;}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  /* REFERRAL & QUICK LINKS */
+  .referral-card{background:rgba(76,255,145,.04);border:1px solid rgba(76,255,145,.15);border-radius:12px;padding:20px 22px;margin-bottom:28px;}
+  .referral-code-row{display:flex;gap:10px;align-items:center;margin-bottom:10px;}
+  .referral-code-box{flex:1;background:rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.1);border-radius:6px;padding:10px 14px;font-family:monospace;font-size:18px;letter-spacing:4px;color:#ffd764;}
+  .btn-copy{padding:10px 18px;background:linear-gradient(135deg,#c9a227,#ffd764);color:#1a0a00;border:none;border-radius:6px;font-family:'Cinzel',serif;font-size:10px;font-weight:700;letter-spacing:2px;cursor:pointer;white-space:nowrap;}
+  .referral-url{font-size:11px;color:rgba(255,255,255,.2);word-break:break-all;margin-bottom:8px;}
+  .referral-stats{font-size:12px;color:rgba(255,255,255,.4);font-family:'Crimson Text',serif;}
+  .quick-links{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:28px;}
+  .ql-btn{padding:10px 18px;border-radius:8px;text-decoration:none;font-size:11px;letter-spacing:1px;font-family:'Cinzel',serif;border:1px solid rgba(255,215,100,.2);color:rgba(255,215,100,.7);transition:.2s;}
+  .ql-btn:hover{border-color:#ffd764;color:#ffd764;background:rgba(255,215,100,.05);}
+  /* DELETE ACCOUNT */
+  .danger-zone{background:rgba(180,0,0,.05);border:1px solid rgba(180,0,0,.2);border-radius:12px;padding:22px 24px;margin-bottom:40px;}
+  .danger-title{font-size:11px;letter-spacing:3px;color:rgba(255,80,80,.6);text-transform:uppercase;margin-bottom:8px;}
+  .danger-desc{font-size:13px;color:rgba(255,255,255,.35);font-family:'Crimson Text',serif;margin-bottom:18px;line-height:1.6;}
+  .btn-danger{padding:10px 22px;background:rgba(180,0,0,.15);border:1px solid rgba(180,0,0,.4);color:#ff6b6b;border-radius:6px;font-family:'Cinzel',serif;font-size:11px;font-weight:700;letter-spacing:2px;cursor:pointer;transition:all .2s;}
+  .btn-danger:hover{background:rgba(180,0,0,.3);border-color:#ff4444;}
+  /* DELETE MODAL */
+  .del-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:600;display:flex;align-items:center;justify-content:center;padding:20px;opacity:0;pointer-events:none;transition:.3s;}
+  .del-modal-overlay.open{opacity:1;pointer-events:all;}
+  .del-modal{background:#0e0500;border:1px solid rgba(180,0,0,.4);border-radius:16px;width:min(440px,100%);padding:32px;}
+  .del-modal-icon{font-size:44px;text-align:center;margin-bottom:16px;}
+  .del-modal-title{font-size:18px;color:#ff6b6b;letter-spacing:2px;text-align:center;margin-bottom:8px;}
+  .del-modal-sub{font-size:13px;color:rgba(255,255,255,.4);text-align:center;font-family:'Crimson Text',serif;line-height:1.6;margin-bottom:24px;}
+  .del-warning-list{background:rgba(180,0,0,.07);border:1px solid rgba(180,0,0,.2);border-radius:8px;padding:14px 18px;margin-bottom:20px;}
+  .del-warning-list li{font-size:12px;color:rgba(255,120,120,.7);font-family:'Crimson Text',serif;margin-bottom:6px;list-style:none;padding-left:0;}
+  .del-warning-list li::before{content:'✗ ';color:#ff4444;}
+  .del-label{font-size:10px;letter-spacing:2px;color:rgba(255,80,80,.5);display:block;margin-bottom:8px;}
+  .del-input{width:100%;background:rgba(255,255,255,.05);border:1px solid rgba(180,0,0,.3);border-radius:6px;padding:11px 14px;color:#f0f0f0;font-family:'Crimson Text',serif;font-size:15px;outline:none;transition:border-color .2s;margin-bottom:16px;}
+  .del-input:focus{border-color:rgba(255,80,80,.6);}
+  .del-input::placeholder{color:rgba(255,255,255,.2);}
+  .del-actions{display:flex;gap:10px;}
+  .btn-del-confirm{flex:1;padding:12px;background:linear-gradient(135deg,#8b0000,#cc2200);color:#fff;border:none;border-radius:6px;font-family:'Cinzel',serif;font-size:11px;font-weight:700;letter-spacing:2px;cursor:pointer;transition:.2s;}
+  .btn-del-confirm:hover{filter:brightness(1.15);}
+  .btn-del-confirm:disabled{opacity:.4;cursor:not-allowed;}
+  .btn-del-cancel{padding:12px 20px;background:transparent;border:1px solid rgba(255,255,255,.15);color:rgba(255,255,255,.5);border-radius:6px;font-family:'Cinzel',serif;font-size:11px;cursor:pointer;transition:.2s;}
+  .btn-del-cancel:hover{border-color:rgba(255,255,255,.35);color:#fff;}
+  .del-error{font-size:12px;color:#ff6b6b;font-family:'Crimson Text',serif;min-height:16px;margin-bottom:8px;}
+</style>
+</head>
+<body>
+<nav class="nav">
+  <div class="nav-logo">♠ BLACKJACK</div>
+  <div class="nav-right">
+    <a class="nav-link" href="blackjack.html">← Back to Table</a>
+    <a class="nav-link" href="leaderboard.html">🏆 Leaderboard</a>
+    <span class="nav-link" onclick="logout()">Sign Out</span>
+  </div>
+</nav>
+
+<!-- Delete Account Modal -->
+<div class="del-modal-overlay" id="delModal">
+  <div class="del-modal">
+    <div class="del-modal-icon">🗑️</div>
+    <div class="del-modal-title">Delete Account</div>
+    <div class="del-modal-sub">This will permanently erase your account.<br>There is <strong>no way to recover it</strong>.</div>
+    <ul class="del-warning-list">
+      <li>Your balance and chips will be lost</li>
+      <li>All stats and achievements deleted</li>
+      <li>Tournament history removed</li>
+      <li>Cosmetics and referral credits erased</li>
+    </ul>
+    <label class="del-label">ENTER YOUR PASSWORD TO CONFIRM</label>
+    <input class="del-input" id="delPassword" type="password" placeholder="Your current password" autocomplete="current-password"/>
+    <div class="del-error" id="delError"></div>
+    <div class="del-actions">
+      <button class="btn-del-confirm" id="delConfirmBtn" onclick="confirmDelete()">Delete Forever</button>
+      <button class="btn-del-cancel" onclick="closeDeleteModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<div class="page" id="page">
+  <div class="loading"><div class="spinner"></div>Loading profile...</div>
+</div>
+
+<script>
+const API = 'http://localhost:4000/api';
+const token = localStorage.getItem('bj_token');
+if (!token) window.location.href = 'index.html';
+const me = JSON.parse(localStorage.getItem('bj_user') || '{}');
+let isOwnProfile = false;
+let profileData = null;
+
+function logout(){ localStorage.removeItem('bj_token'); localStorage.removeItem('bj_user'); window.location.href='index.html'; }
+function showToast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2500); }
+function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+const ALL_ACHIEVEMENTS = [
+  { key:'first_hand',      name:'First Hand',    desc:'Play your first hand',      icon:'🃏' },
+  { key:'first_blackjack', name:'Natural!',       desc:'Get a natural blackjack',   icon:'⭐' },
+  { key:'win_streak_3',   name:'Hot Streak',     desc:'Win 3 hands in a row',      icon:'🔥' },
+  { key:'win_streak_5',   name:'On Fire',        desc:'Win 5 hands in a row',      icon:'💥' },
+  { key:'win_streak_10',  name:'Unstoppable',    desc:'Win 10 hands in a row',     icon:'👑' },
+  { key:'high_roller',    name:'High Roller',    desc:'Win with a $100+ bet',      icon:'💰' },
+  { key:'comeback',       name:'Comeback Kid',   desc:'Win when nearly broke',     icon:'💪' },
+  { key:'veteran_100',    name:'Veteran',        desc:'Play 100 hands',            icon:'🎖️' },
+  { key:'veteran_500',    name:'Elite',          desc:'Play 500 hands',            icon:'🏆' },
+  { key:'rich',           name:'Millionaire',    desc:'Reach $10,000 balance',     icon:'💎' },
+  { key:'double_win',     name:'Doubling Down',  desc:'Win a doubled hand',        icon:'✌️' },
+  { key:'split_win',      name:'Split Decision', desc:'Win after splitting',       icon:'⚡' },
+];
+
+const TIERS = [
+  { name:'Bronze',   minPts:0,      color:'#cd7f32', icon:'🥉' },
+  { name:'Silver',   minPts:75000,  color:'#aaa',    icon:'🥈' },
+  { name:'Gold',     minPts:150000, color:'#c9a227', icon:'🥇' },
+  { name:'Platinum', minPts:225000, color:'#e5e4e2', icon:'💠' },
+  { name:'Diamond',  minPts:300000, color:'#8866ff', icon:'💎' },
+];
+
+async function loadProfile() {
+  const username = new URLSearchParams(location.search).get('u') || me.username;
+  if (!username) { window.location.href='index.html'; return; }
+  isOwnProfile = (username === me.username);
+
+  try {
+    const res = await fetch(`${API}/profile/${encodeURIComponent(username)}`);
+    if (!res.ok) { document.getElementById('page').innerHTML='<div class="loading">Player not found.</div>'; return; }
+    profileData = await res.json();
+    render(profileData);
+  } catch {
+    document.getElementById('page').innerHTML='<div class="loading">Could not load profile. Is the server running?</div>';
+  }
+}
+
+function getTierProgress(points) {
+  let tierIdx = 0;
+  for (let i = TIERS.length - 1; i >= 0; i--) {
+    if (points >= TIERS[i].minPts) { tierIdx = i; break; }
+  }
+  const tier = TIERS[tierIdx];
+  const next = TIERS[tierIdx + 1];
+  const pct = next ? Math.min(100, Math.round((points - tier.minPts) / (next.minPts - tier.minPts) * 100)) : 100;
+  return { tierIdx, tier, next, pct, points };
+}
+
+function render(data) {
+  const s = data.stats || {};
+  const wr = s.totalHands > 0 ? Math.round(s.wins / s.totalHands * 100) : 0;
+  const unlockedKeys = new Set((data.achievements||[]).map(a=>a.achievement_key));
+  const joined = data.createdAt ? new Date(data.createdAt).toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'}) : '—';
+  const totalWon = data.totalWon || s.totalWon || 0;
+  const tp = getTierProgress(totalWon);
+  const displayName = data.displayName || data.username;
+
+  const avatarHTML = data.avatar
+    ? `<img src="${data.avatar}" alt="avatar"/>`
+    : esc(displayName[0].toUpperCase());
+
+  const editSection = isOwnProfile ? `
+    <div class="edit-card">
+      <div class="edit-title">Edit Profile</div>
+      <div class="edit-row">
+        <div class="edit-field">
+          <label class="edit-label">Display Name</label>
+          <input class="edit-input" id="displayNameInput" type="text" maxlength="30" placeholder="${esc(displayName)}" value="${esc(displayName)}"/>
+        </div>
+        <button class="btn-save" onclick="saveDisplayName()">Save</button>
+      </div>
+      <div class="edit-msg" id="editMsg"></div>
+    </div>` : '';
+
+  const tierStepsHTML = TIERS.map((t, i) => {
+    const done = tp.tierIdx > i;
+    const active = tp.tierIdx === i;
+    return `<div class="tier-step ${done?'done':active?'active':''}">
+      <div class="tier-icon">${t.icon}</div>
+      <div class="tier-name">${t.name}</div>
+      <div class="tier-req">${t.minPts === 0 ? 'Start' : (t.minPts/1000)+'k pts'}</div>
+      <div class="tier-check">${done ? '✅' : active ? '◉' : '○'}</div>
+    </div>`;
+  }).join('');
+
+  const nextLabel = tp.next
+    ? `${(tp.next.minPts - tp.points).toLocaleString()} pts to ${tp.next.name}`
+    : 'Maximum tier reached!';
+
+  document.getElementById('page').innerHTML = `
+    <div class="profile-hero">
+      <div class="avatar-wrap" ${isOwnProfile ? 'onclick="triggerAvatarUpload()"' : ''} title="${isOwnProfile?'Click to change photo':''}">
+        <div class="avatar" id="heroAvatar">${avatarHTML}</div>
+        ${isOwnProfile ? '<div class="avatar-edit">✏️</div><input type="file" id="avatarInput" accept="image/*"/>' : ''}
+      </div>
+      <div class="hero-info">
+        <div class="hero-name" id="heroName">${esc(displayName)}</div>
+        <div class="hero-joined">Member since ${joined}</div>
+        <span class="vip-badge vip-${tp.tier.name}">${tp.tier.name}</span>
+      </div>
+      <div style="text-align:right">
+        <div class="hero-balance-label">Balance</div>
+        <div class="hero-balance">$${(data.balance||0).toLocaleString()}</div>
+      </div>
+    </div>
+
+    ${editSection}
+
+    <div class="section-title">Tier Progress</div>
+    <div class="tier-track">${tierStepsHTML}</div>
+    <div class="tier-progress-bar">
+      <div class="tpb-header">
+        <span class="tpb-tier">${tp.tier.name}</span>
+        <span class="tpb-pts">${tp.points.toLocaleString()} points earned</span>
+      </div>
+      <div class="tpb-bar"><div class="tpb-fill" id="tpbFill" style="width:0%;background:${tp.tier.color}"></div></div>
+      <div class="tpb-next">${nextLabel}</div>
+    </div>
+
+    <div class="section-title">Statistics</div>
+    <div class="stats-grid">
+      <div class="stat-card"><div class="stat-card-val green">${s.wins||0}</div><div class="stat-card-label">Wins</div></div>
+      <div class="stat-card"><div class="stat-card-val red">${s.losses||0}</div><div class="stat-card-label">Losses</div></div>
+      <div class="stat-card"><div class="stat-card-val">${s.pushes||0}</div><div class="stat-card-label">Pushes</div></div>
+      <div class="stat-card"><div class="stat-card-val">${s.blackjacks||0}</div><div class="stat-card-label">Blackjacks</div></div>
+      <div class="stat-card"><div class="stat-card-val blue">${s.totalHands||0}</div><div class="stat-card-label">Total Hands</div></div>
+      <div class="stat-card"><div class="stat-card-val">${s.maxWinStreak||0}</div><div class="stat-card-label">Best Streak</div></div>
+      <div class="stat-card"><div class="stat-card-val green">$${(s.biggestWin||0).toLocaleString()}</div><div class="stat-card-label">Biggest Win</div></div>
+      <div class="stat-card"><div class="stat-card-val blue">$${totalWon.toLocaleString()}</div><div class="stat-card-label">Points (Total Won)</div></div>
+    </div>
+
+    <div class="winrate-row">
+      <span class="winrate-label">Win Rate</span>
+      <div class="winrate-bar"><div class="winrate-fill" id="wrFill" style="width:0%"></div></div>
+      <span class="winrate-pct">${wr}%</span>
+    </div>
+
+    <div class="section-title">Achievements (${unlockedKeys.size} / ${ALL_ACHIEVEMENTS.length})</div>
+    <div class="ach-grid">
+      ${ALL_ACHIEVEMENTS.map(a => {
+        const unlocked = unlockedKeys.has(a.key);
+        const achData = (data.achievements||[]).find(x=>x.achievement_key===a.key);
+        const dateStr = achData ? new Date(achData.unlocked_at).toLocaleDateString() : '';
+        return `<div class="ach-card ${unlocked?'unlocked':'locked'}">
+          <div class="ach-icon">${a.icon}</div>
+          <div class="ach-info">
+            <div class="ach-name">${a.name}</div>
+            <div class="ach-desc">${a.desc}</div>
+            ${unlocked?`<div class="ach-date">${dateStr}</div>`:''}
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+
+    ${isOwnProfile ? `
+    <div class="section-title" style="margin-top:28px;">Quick Links</div>
+    <div class="quick-links">
+      <a class="ql-btn" href="tournament.html">🏆 Tournaments</a>
+      <a class="ql-btn" href="shop.html">🎨 Cosmetics Shop</a>
+      <a class="ql-btn" href="responsible.html">🛡️ Responsible Play</a>
+      <a class="ql-btn" href="leaderboard.html">📊 Leaderboard</a>
+    </div>
+    <div class="section-title">Referral Program</div>
+    <div class="referral-card" id="referralSection">
+      <div style="font-size:12px;color:rgba(255,255,255,.3);">Loading referral info…</div>
+    </div>
+    <div class="section-title" style="margin-top:28px;color:rgba(255,80,80,.5);">Danger Zone</div>
+    <div class="danger-zone">
+      <div class="danger-title">⚠️ Delete Account</div>
+      <div class="danger-desc">Permanently delete your account and all associated data — balance, stats, achievements, cosmetics, and tournament history. <strong style="color:#ff6b6b;">This cannot be undone.</strong></div>
+      <button class="btn-danger" onclick="openDeleteModal()">🗑️ Delete My Account</button>
+    </div>` : ''}
+  `;
+
+  setTimeout(()=>{
+    const f=document.getElementById('tpbFill'); if(f) f.style.width=tp.pct+'%';
+    const w=document.getElementById('wrFill'); if(w) w.style.width=wr+'%';
+  },100);
+
+  if (isOwnProfile) {
+    const inp = document.getElementById('avatarInput');
+    if (inp) inp.addEventListener('change', handleAvatarChange);
+  }
+}
+
+function triggerAvatarUpload(){
+  const inp = document.getElementById('avatarInput');
+  if (inp) inp.click();
+}
+
+function handleAvatarChange(e){
+  const file = e.target.files[0];
+  if (!file) return;
+  if (!file.type.startsWith('image/')) { showToast('Please select an image file.'); return; }
+  const reader = new FileReader();
+  reader.onload = async (ev) => {
+    const base64 = await compressImage(ev.target.result, 200, 0.75);
+    await uploadAvatar(base64);
+  };
+  reader.readAsDataURL(file);
+}
+
+function compressImage(dataUrl, maxSize, quality) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const scale = Math.min(maxSize / img.width, maxSize / img.height, 1);
+      canvas.width = img.width * scale;
+      canvas.height = img.height * scale;
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+      resolve(canvas.toDataURL('image/jpeg', quality));
+    };
+    img.src = dataUrl;
+  });
+}
+
+async function uploadAvatar(base64){
+  try {
+    const res = await fetch(`${API}/profile`, {
+      method:'PUT',
+      headers:{'Content-Type':'application/json', Authorization:'Bearer '+token},
+      body: JSON.stringify({ avatar: base64 })
+    });
+    if (res.ok) {
+      const d = await res.json();
+      const avatarEl = document.getElementById('heroAvatar');
+      if (avatarEl) avatarEl.innerHTML = `<img src="${base64}" alt="avatar"/>`;
+      showToast('Profile picture updated!');
+    } else {
+      showToast('Upload failed. Try again.');
+    }
+  } catch { showToast('Cannot connect to server.'); }
+}
+
+async function saveDisplayName(){
+  const input = document.getElementById('displayNameInput');
+  const msgEl = document.getElementById('editMsg');
+  const val = input.value.trim();
+  if (!val || val.length < 1) { msgEl.textContent='Name cannot be empty.'; msgEl.className='edit-msg err'; return; }
+  const btn = document.querySelector('.btn-save');
+  btn.disabled = true;
+  msgEl.textContent = ''; msgEl.className = 'edit-msg';
+  try {
+    const res = await fetch(`${API}/profile`, {
+      method:'PUT',
+      headers:{'Content-Type':'application/json', Authorization:'Bearer '+token},
+      body: JSON.stringify({ displayName: val })
+    });
+    if (res.ok) {
+      const heroName = document.getElementById('heroName');
+      if (heroName) heroName.textContent = val;
+      msgEl.textContent = 'Display name updated!'; msgEl.className='edit-msg ok';
+      setTimeout(()=>{ msgEl.textContent=''; msgEl.className='edit-msg'; }, 3000);
+    } else {
+      const d = await res.json();
+      msgEl.textContent = d.error || 'Update failed.'; msgEl.className='edit-msg err';
+    }
+  } catch {
+    msgEl.textContent = 'Cannot connect to server.'; msgEl.className='edit-msg err';
+  } finally { btn.disabled = false; }
+}
+
+async function loadReferral() {
+  const el = document.getElementById('referralSection');
+  if (!el) return;
+  try {
+    const res = await fetch(`${API}/my-referral`, { headers: { Authorization: 'Bearer ' + token } });
+    const d = await res.json();
+    if (d.error) { el.innerHTML = `<div style="color:rgba(255,255,255,.3);font-size:12px;">${d.error}</div>`; return; }
+    el.innerHTML = `
+      <div style="font-size:10px;letter-spacing:2px;color:rgba(76,255,145,.5);margin-bottom:10px;">YOUR REFERRAL CODE</div>
+      <div class="referral-code-row">
+        <div class="referral-code-box">${esc(d.code)}</div>
+        <button class="btn-copy" onclick="copyRef('${esc(d.referralUrl)}')">Copy Link</button>
+      </div>
+      <div class="referral-url">${esc(d.referralUrl)}</div>
+      <div class="referral-stats">
+        You've referred <strong style="color:#fff;">${d.totalReferred}</strong> friend(s) — earned
+        <strong style="color:#4cff91;">$${(d.totalReferred * d.bonusPerReferral).toLocaleString()} bonus chips</strong>
+        · $${d.bonusPerReferral} per referral for both of you
+      </div>`;
+  } catch { el.innerHTML = `<div style="color:rgba(255,255,255,.3);font-size:12px;">Could not load referral info.</div>`; }
+}
+
+function copyRef(url) {
+  navigator.clipboard.writeText(url).then(() => showToast('✅ Referral link copied!'));
+}
+
+// ── DELETE ACCOUNT ────────────────────────────────────
+function openDeleteModal() {
+  document.getElementById('delPassword').value = '';
+  document.getElementById('delError').textContent = '';
+  document.getElementById('delConfirmBtn').disabled = false;
+  document.getElementById('delModal').classList.add('open');
+  setTimeout(() => document.getElementById('delPassword').focus(), 300);
+}
+
+function closeDeleteModal() {
+  document.getElementById('delModal').classList.remove('open');
+}
+
+// Close modal on overlay click
+document.getElementById('delModal').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeDeleteModal();
+});
+
+// Allow Enter key in password field
+document.addEventListener('DOMContentLoaded', () => {
+  const inp = document.getElementById('delPassword');
+  if (inp) inp.addEventListener('keydown', e => { if (e.key === 'Enter') confirmDelete(); });
+});
+
+async function confirmDelete() {
+  const password = document.getElementById('delPassword').value;
+  const errEl = document.getElementById('delError');
+  const btn = document.getElementById('delConfirmBtn');
+
+  errEl.textContent = '';
+  if (!password) { errEl.textContent = 'Please enter your password.'; return; }
+
+  btn.disabled = true;
+  btn.textContent = 'Deleting…';
+
+  try {
+    const res = await fetch(`${API}/account`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+      body: JSON.stringify({ password }),
+    });
+    const data = await res.json();
+
+    if (!res.ok) {
+      errEl.textContent = data.error || 'Deletion failed. Try again.';
+      btn.disabled = false;
+      btn.textContent = 'Delete Forever';
+      return;
+    }
+
+    // Success — clear local storage and redirect
+    localStorage.removeItem('bj_token');
+    localStorage.removeItem('bj_user');
+    closeDeleteModal();
+    document.getElementById('page').innerHTML = `
+      <div style="text-align:center;padding:80px 20px;">
+        <div style="font-size:48px;margin-bottom:16px;">👋</div>
+        <h2 style="color:#ffd764;letter-spacing:3px;margin-bottom:12px;">Account Deleted</h2>
+        <p style="color:rgba(255,255,255,.4);font-family:'Crimson Text',serif;margin-bottom:24px;">Your account has been permanently removed. We hope to see you again someday.</p>
+        <a href="index.html" style="display:inline-block;padding:12px 32px;background:linear-gradient(135deg,#c9a227,#ffd764);color:#1a0a00;border-radius:6px;font-weight:700;text-decoration:none;font-family:'Cinzel',serif;font-size:11px;letter-spacing:2px;">Return to Home</a>
+      </div>`;
+    setTimeout(() => window.location.href = 'index.html', 5000);
+  } catch {
+    errEl.textContent = 'Cannot connect to server. Try again.';
+    btn.disabled = false;
+    btn.textContent = 'Delete Forever';
+  }
+}
+
+loadProfile().then(() => { if (isOwnProfile) loadReferral(); });
+</script>
+</body>
+</html>
