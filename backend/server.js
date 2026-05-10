@@ -13,7 +13,10 @@ require('dotenv').config();
 let mailer = null;
 if (process.env.EMAIL_USER && !process.env.EMAIL_USER.includes('REPLACE_ME')) {
   mailer = nodemailer.createTransport({
-    service: 'gmail',
+    host: 'smtp.gmail.com',
+    port: 465,
+    secure: true,
+    family: 4, // force IPv4 (fixes Railway IPv6 issues)
     auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
   });
   mailer.verify(err => {
