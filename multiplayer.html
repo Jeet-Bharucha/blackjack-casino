@@ -241,7 +241,7 @@
 
 <div class="toast" id="toast"></div>
 
-<script src="http://localhost:4000/socket.io/socket.io.js"></script>
+<script src="http://blackjack-casino-production.up.railway.app/socket.io/socket.io.js"></script>
 <script>
 const token = localStorage.getItem('bj_token');
 if (!token) window.location.href = 'index.html';
@@ -260,7 +260,7 @@ let myTurn = false;
 let tablePhase = 'waiting';
 
 // ── SOCKET ─────────────────────────────────────────
-const socket = io('http://localhost:4000');
+const socket = io('http://blackjack-casino-production.up.railway.app');
 socket.emit('auth', { token });
 
 socket.on('table_list', tables => renderLobby(tables));

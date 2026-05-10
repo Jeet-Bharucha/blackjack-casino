@@ -660,7 +660,7 @@ app.post('/api/buy-coins', auth, async (req, res) => {
   }
 
   try {
-    const appUrl = process.env.APP_URL || 'http://localhost:4000';
+    const appUrl = process.env.APP_URL || 'http://blackjack-casino-production.up.railway.app';
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
       mode: 'payment',
@@ -1107,7 +1107,7 @@ app.get('/api/my-referral', auth, async (req, res) => {
       await db.execute('UPDATE users SET referral_code=? WHERE id=?', [code, req.user.id]);
     }
     const [[{total}]] = await db.execute('SELECT COUNT(*) as total FROM users WHERE referred_by=?', [req.user.id]);
-    const appUrl = process.env.APP_URL || 'http://localhost:4000';
+    const appUrl = process.env.APP_URL || 'http://blackjack-casino-production.up.railway.app';
     res.json({ code, referralUrl: `${appUrl}/index.html?ref=${code}`, totalReferred: total, bonusPerReferral: 100 });
   } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
@@ -1139,7 +1139,7 @@ app.post('/api/subscribe', auth, async (req, res) => {
   }
   try {
     const [rows] = await db.execute('SELECT email FROM users WHERE id=?', [req.user.id]);
-    const appUrl = process.env.APP_URL || 'http://localhost:4000';
+    const appUrl = process.env.APP_URL || 'http://blackjack-casino-production.up.railway.app';
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
       mode: 'subscription',
