@@ -795,16 +795,18 @@ app.get('/api/verify-payment', auth, async (req, res) => {
       await db.execute('INSERT INTO stripe_purchases (user_id, session_id, chips, pkg) VALUES (?,?,?,?)',
         [req.user.id, session_id, chips, pkg]);
 
-      // Send invoice email
-      const [uRows] = await db.execute('SELECT username, email, balance FROM users WHERE id=?', [req.user.id]);
-      if (uRows.length) {
-        const u = uRows[0];
-        await sendEmail({
-          to: u.email,
-          subject: `🎉 Payment Confirmed — ${chips.toLocaleString()} chips added!`,
-          html: receiptEmailHTML({ username: u.username, chips, amount: session.amount_total, newBalance: u.balance, pkg }),
-        });
-      }
+      // Send invoice email — non-blocking, never delays the response
+      db.execute('SELECT username, email, balance FROM users WHERE id=?', [req.user.id])
+        .then(([uRows]) => {
+          if (uRows.length) {
+            const u = uRows[0];
+            sendEmail({
+              to: u.email,
+              subject: `🎉 Payment Confirmed — ${chips.toLocaleString()} chips added!`,
+              html: receiptEmailHTML({ username: u.username, chips, amount: session.amount_total, newBalance: u.balance, pkg }),
+            }).catch(err => console.error('Invoice email failed:', err.message));
+          }
+        }).catch(() => {});
     }
 
     const [rows] = await db.execute('SELECT balance FROM users WHERE id=?', [req.user.id]);
