@@ -991,6 +991,10 @@ async function dealerPlay(){
     const profit=totalPayout-totalBet;
     showResultPopup(result===('split_win')?'win':'push',`Split: ${wins}W ${losses}L`,profit>=0?'+$'+profit:'-$'+Math.abs(profit),profit);
     saveResult(result,totalBet,totalPayout);
+    // Save game history (non-blocking)
+    const splitPlayerStr = playerHands.map(h=>h.cards.map(c=>c.rank+c.suit).join(' ')).join(' | ');
+    const splitDealerStr = dealerCards.map(c=>c.rank+c.suit).join(' ');
+    fetch(`${API}/game-history`,{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:JSON.stringify({result,bet:totalBet,payout:totalPayout,balanceAfter:balance,playerHand:splitPlayerStr,dealerHand:splitDealerStr})}).catch(()=>{});
     playTone(profit>0?'win':'lose');
     if(profit>0){spawnConfetti();triggerWinAnimation();speak('You win!');}else speak('Dealer wins.');
     return;
@@ -1009,6 +1013,11 @@ function endRound(result){
 
   balance=Math.max(0,balance+payout);
   updateUI(); saveResult(result,bet,payout);
+
+  // Save game history (non-blocking)
+  const playerHandStr = playerHands[0].cards.map(c=>c.rank+c.suit).join(' ');
+  const dealerHandStr = dealerCards.map(c=>c.rank+c.suit).join(' ');
+  fetch(`${API}/game-history`,{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:JSON.stringify({result,bet,payout,balanceAfter:balance,playerHand:playerHandStr,dealerHand:dealerHandStr})}).catch(()=>{});
 
   const profit=payout-bet;
   const titles={blackjack:'Blackjack!',win:'You Win!',dealer_bust:'Dealer Busts!',double_win:'Double Win!',push:'Push',bust:'Bust!',lose:'Dealer Wins'};
@@ -1079,5 +1088,6 @@ document.addEventListener('click', e => { const m=document.getElementById('mobil
 buildShoe(6); loadUser(); loadCosmetics(); setStatus('Place your bet and deal'); enableBetting(true);
 document.addEventListener('click',()=>{if(audioCtx.state==='suspended') audioCtx.resume();},{once:true});
 </script>
+<script src="cookie-banner.js"></script>
 </body>
 </html>

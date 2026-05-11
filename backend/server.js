@@ -354,6 +354,21 @@ async function connectDB() {
     ('perk','insurance_boost','Insurance Boost','Improved insurance payout: 3:2 instead of 2:1',2500)
   `);
 
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS game_history (
+      id          INT AUTO_INCREMENT PRIMARY KEY,
+      user_id     INT NOT NULL,
+      result      VARCHAR(20) NOT NULL,
+      bet         INT NOT NULL,
+      payout      INT NOT NULL,
+      balance_after INT NOT NULL,
+      player_hand VARCHAR(100),
+      dealer_hand VARCHAR(100),
+      played_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `);
+
   // ALTER TABLE for existing deployments — safe to run every boot
   const alterColumns = [
     "ALTER TABLE users ADD COLUMN has_bonus_slot      TINYINT(1)  NOT NULL DEFAULT 0    AFTER verified_at",
@@ -993,6 +1008,47 @@ app.post('/api/game/result', auth, async (req, res) => {
 
     res.json({ balance, vipTier: vip_tier, tierProgress: getTierProgress(total_won), stats: extractStats(updatedUser), newAchievements });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
+});
+
+// ── TRANSACTIONS ─────────────────────────────────────
+app.get('/api/transactions', auth, async (req, res) => {
+  try {
+    const [purchases] = await db.execute(
+      'SELECT "chip_purchase" as type, chips, pkg as description, credited_at as date FROM stripe_purchases WHERE user_id=? ORDER BY credited_at DESC LIMIT 50',
+      [req.user.id]
+    );
+    const [cosmetics] = await db.execute(
+      `SELECT "cosmetic" as type, c.price as chips, c.name as description, uc.purchased_at as date
+       FROM user_cosmetics uc JOIN cosmetics c ON c.id=uc.cosmetic_id
+       WHERE uc.user_id=? ORDER BY uc.purchased_at DESC LIMIT 50`,
+      [req.user.id]
+    );
+    const all = [...purchases, ...cosmetics].sort((a,b) => new Date(b.date) - new Date(a.date));
+    res.json(all);
+  } catch(err) { res.status(500).json({error:'Server error'}); }
+});
+
+// ── GAME HISTORY ──────────────────────────────────────
+app.get('/api/game-history', auth, async (req, res) => {
+  try {
+    const [rows] = await db.execute(
+      'SELECT * FROM game_history WHERE user_id=? ORDER BY played_at DESC LIMIT 100',
+      [req.user.id]
+    );
+    res.json(rows);
+  } catch(err) { res.status(500).json({error:'Server error'}); }
+});
+
+app.post('/api/game-history', auth, async (req, res) => {
+  try {
+    const { result, bet, payout, balanceAfter, playerHand, dealerHand } = req.body;
+    if (!result || !bet) return res.status(400).json({error:'Missing fields'});
+    await db.execute(
+      'INSERT INTO game_history (user_id, result, bet, payout, balance_after, player_hand, dealer_hand) VALUES (?,?,?,?,?,?,?)',
+      [req.user.id, result, bet, payout||0, balanceAfter||0, playerHand||'', dealerHand||'']
+    );
+    res.json({success:true});
+  } catch(err) { res.status(500).json({error:'Server error'}); }
 });
 
 // ── PROFILE PAGE ──────────────────────────────────────

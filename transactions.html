@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Blackjack — Transaction History</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=Cinzel:wght@400;600;700&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap');
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{min-height:100vh;background:#0d0500;font-family:'Cinzel',serif;color:#f0f0f0;}
+  body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellipse 70% 50% at 50% 20%,rgba(0,70,15,.25) 0%,transparent 70%);pointer-events:none;}
+
+  .nav{display:flex;align-items:center;justify-content:space-between;padding:14px 32px;background:rgba(10,5,0,.9);border-bottom:1px solid rgba(255,215,100,.1);position:sticky;top:0;z-index:50;backdrop-filter:blur(8px);}
+  .nav-logo{font-size:18px;font-weight:700;color:#ffd764;letter-spacing:4px;text-decoration:none;}
+  .nav-right{display:flex;gap:20px;}
+  .nav-link{font-size:10px;letter-spacing:2px;color:rgba(255,215,100,.5);text-decoration:none;cursor:pointer;transition:color .2s;}
+  .nav-link:hover{color:#ffd764;}
+
+  .page{max-width:860px;margin:0 auto;padding:44px 24px 60px;}
+
+  .page-header{margin-bottom:32px;}
+  .page-title{font-size:24px;font-weight:700;color:#ffd764;letter-spacing:3px;margin-bottom:6px;}
+  .page-sub{font-size:13px;color:rgba(255,255,255,.35);font-family:'Crimson Text',serif;}
+
+  .tx-table{width:100%;border-collapse:collapse;}
+  .tx-table th{font-size:9px;letter-spacing:3px;color:rgba(255,215,100,.4);text-transform:uppercase;padding:10px 14px;text-align:left;border-bottom:1px solid rgba(255,215,100,.1);}
+  .tx-table td{padding:14px 14px;border-bottom:1px solid rgba(255,255,255,.04);font-family:'Crimson Text',serif;font-size:14px;vertical-align:middle;}
+  .tx-table tr:hover td{background:rgba(255,215,100,.02);}
+
+  .tx-icon{font-size:20px;width:36px;}
+  .tx-desc{color:#f0f0f0;font-size:14px;}
+  .tx-type{font-size:10px;letter-spacing:1px;color:rgba(255,255,255,.3);margin-top:2px;text-transform:uppercase;}
+  .tx-amount.positive{color:#4cff91;font-weight:700;font-family:'Playfair Display',serif;font-size:16px;}
+  .tx-amount.negative{color:#ff6b6b;font-weight:700;font-family:'Playfair Display',serif;font-size:16px;}
+  .tx-date{color:rgba(255,255,255,.35);font-size:12px;}
+
+  .empty-state{text-align:center;padding:80px 20px;color:rgba(255,215,100,.3);}
+  .empty-icon{font-size:48px;margin-bottom:16px;}
+  .empty-title{font-size:16px;letter-spacing:2px;margin-bottom:8px;}
+  .empty-sub{font-size:13px;font-family:'Crimson Text',serif;font-style:italic;}
+
+  .loading{text-align:center;padding:60px;color:rgba(255,215,100,.3);font-family:'Crimson Text',serif;font-style:italic;}
+  .spinner{width:32px;height:32px;border:2px solid rgba(255,215,100,.15);border-top-color:#ffd764;border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 16px;}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  .card-wrap{background:rgba(255,255,255,.02);border:1px solid rgba(255,215,100,.08);border-radius:12px;overflow:hidden;}
+
+  @media(max-width:600px){
+    .tx-table th:nth-child(4),.tx-table td:nth-child(4){display:none;}
+    .nav{padding:12px 16px;}
+    .page{padding:28px 12px 48px;}
+  }
+</style>
+</head>
+<body>
+<nav class="nav">
+  <a class="nav-logo" href="blackjack.html">♠ BLACKJACK</a>
+  <div class="nav-right">
+    <a class="nav-link" href="blackjack.html">← Back to Table</a>
+    <a class="nav-link" href="history.html">🃏 Game History</a>
+    <a class="nav-link" href="profile.html">Profile</a>
+    <span class="nav-link" onclick="logout()">Sign Out</span>
+  </div>
+</nav>
+
+<div class="page">
+  <div class="page-header">
+    <div class="page-title">Transaction History</div>
+    <div class="page-sub">Your chip purchases and cosmetic purchases</div>
+  </div>
+  <div id="content">
+    <div class="loading"><div class="spinner"></div>Loading transactions...</div>
+  </div>
+</div>
+
+<script src="cookie-banner.js"></script>
+<script>
+const API = 'https://blackjack-casino-production.up.railway.app/api';
+const token = localStorage.getItem('bj_token');
+if (!token) window.location.href = 'login.html';
+
+function logout(){ localStorage.removeItem('bj_token'); localStorage.removeItem('bj_user'); window.location.href='login.html'; }
+
+function formatDate(dateStr) {
+  if (!dateStr) return '—';
+  const d = new Date(dateStr);
+  return d.toLocaleDateString('en-US',{year:'numeric',month:'short',day:'numeric'}) + ' ' +
+    d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
+}
+
+async function loadTransactions() {
+  try {
+    const res = await fetch(`${API}/transactions`, { headers: { Authorization: 'Bearer ' + token } });
+    if (!res.ok) { document.getElementById('content').innerHTML = '<div class="loading">Failed to load transactions.</div>'; return; }
+    const data = await res.json();
+
+    if (!data.length) {
+      document.getElementById('content').innerHTML = `
+        <div class="empty-state">
+          <div class="empty-icon">🧾</div>
+          <div class="empty-title">No Transactions Yet</div>
+          <div class="empty-sub">Your chip purchases and cosmetic purchases will appear here.</div>
+        </div>`;
+      return;
+    }
+
+    const rows = data.map(tx => {
+      const isChip = tx.type === 'chip_purchase';
+      const icon = isChip ? '🛒' : '🎨';
+      const amountSign = isChip ? '+' : '-';
+      const amountClass = isChip ? 'positive' : 'negative';
+      const typeLabel = isChip ? 'Chip Purchase' : 'Cosmetic';
+      return `<tr>
+        <td class="tx-icon">${icon}</td>
+        <td><div class="tx-desc">${String(tx.description||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')}</div><div class="tx-type">${typeLabel}</div></td>
+        <td><span class="tx-amount ${amountClass}">${amountSign}$${Number(tx.chips||0).toLocaleString()}</span></td>
+        <td class="tx-date">${formatDate(tx.date)}</td>
+      </tr>`;
+    }).join('');
+
+    document.getElementById('content').innerHTML = `
+      <div class="card-wrap">
+        <table class="tx-table">
+          <thead><tr>
+            <th></th>
+            <th>Description</th>
+            <th>Amount</th>
+            <th>Date</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+  } catch {
+    document.getElementById('content').innerHTML = '<div class="loading">Could not connect to server.</div>';
+  }
+}
+
+loadTransactions();
+</script>
+</body>
+</html>

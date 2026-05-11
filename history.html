@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Blackjack — Game History</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=Cinzel:wght@400;600;700&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap');
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{min-height:100vh;background:#0d0500;font-family:'Cinzel',serif;color:#f0f0f0;}
+  body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellipse 70% 50% at 50% 20%,rgba(0,70,15,.25) 0%,transparent 70%);pointer-events:none;}
+
+  .nav{display:flex;align-items:center;justify-content:space-between;padding:14px 32px;background:rgba(10,5,0,.9);border-bottom:1px solid rgba(255,215,100,.1);position:sticky;top:0;z-index:50;backdrop-filter:blur(8px);}
+  .nav-logo{font-size:18px;font-weight:700;color:#ffd764;letter-spacing:4px;text-decoration:none;}
+  .nav-right{display:flex;gap:20px;}
+  .nav-link{font-size:10px;letter-spacing:2px;color:rgba(255,215,100,.5);text-decoration:none;cursor:pointer;transition:color .2s;}
+  .nav-link:hover{color:#ffd764;}
+
+  .page{max-width:1000px;margin:0 auto;padding:44px 24px 60px;}
+
+  .page-header{margin-bottom:28px;}
+  .page-title{font-size:24px;font-weight:700;color:#ffd764;letter-spacing:3px;margin-bottom:6px;}
+  .page-sub{font-size:13px;color:rgba(255,255,255,.35);font-family:'Crimson Text',serif;}
+
+  /* SUMMARY STATS */
+  .stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:28px;}
+  .stat-card{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);border-radius:10px;padding:16px;text-align:center;}
+  .stat-val{font-size:26px;font-weight:700;font-family:'Playfair Display',serif;color:#ffd764;margin-bottom:4px;}
+  .stat-val.green{color:#4cff91;}.stat-val.red{color:#ff6b6b;}.stat-val.gold{color:#ffd764;}
+  .stat-label{font-size:9px;letter-spacing:2px;color:rgba(255,255,255,.35);text-transform:uppercase;}
+
+  /* TABLE */
+  .card-wrap{background:rgba(255,255,255,.02);border:1px solid rgba(255,215,100,.08);border-radius:12px;overflow:hidden;}
+  .gh-table{width:100%;border-collapse:collapse;}
+  .gh-table th{font-size:9px;letter-spacing:3px;color:rgba(255,215,100,.4);text-transform:uppercase;padding:10px 14px;text-align:left;border-bottom:1px solid rgba(255,215,100,.1);}
+  .gh-table td{padding:12px 14px;border-bottom:1px solid rgba(255,255,255,.04);font-family:'Crimson Text',serif;font-size:14px;vertical-align:middle;}
+  .gh-table tr:hover td{background:rgba(255,215,100,.02);}
+
+  /* RESULT BADGE */
+  .badge{display:inline-block;font-size:10px;font-weight:700;font-family:'Cinzel',serif;letter-spacing:1px;padding:3px 10px;border-radius:4px;text-transform:uppercase;}
+  .badge-win{background:rgba(76,255,145,.15);color:#4cff91;border:1px solid rgba(76,255,145,.3);}
+  .badge-loss{background:rgba(255,68,68,.12);color:#ff6b6b;border:1px solid rgba(255,68,68,.25);}
+  .badge-push{background:rgba(255,255,255,.06);color:rgba(255,255,255,.5);border:1px solid rgba(255,255,255,.1);}
+  .badge-blackjack{background:rgba(255,215,100,.15);color:#ffd764;border:1px solid rgba(255,215,100,.35);}
+
+  .payout-pos{color:#4cff91;font-weight:700;font-family:'Playfair Display',serif;}
+  .payout-neg{color:#ff6b6b;font-weight:700;font-family:'Playfair Display',serif;}
+  .payout-zero{color:rgba(255,255,255,.4);font-family:'Playfair Display',serif;}
+
+  .hand-text{font-size:11px;color:rgba(255,255,255,.35);font-family:monospace;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .date-text{font-size:12px;color:rgba(255,255,255,.35);}
+  .balance-text{font-family:'Playfair Display',serif;color:#ffd764;}
+
+  .empty-state{text-align:center;padding:80px 20px;color:rgba(255,215,100,.3);}
+  .empty-icon{font-size:48px;margin-bottom:16px;}
+  .empty-title{font-size:16px;letter-spacing:2px;margin-bottom:8px;}
+  .empty-sub{font-size:13px;font-family:'Crimson Text',serif;font-style:italic;}
+
+  .loading{text-align:center;padding:60px;color:rgba(255,215,100,.3);font-family:'Crimson Text',serif;font-style:italic;}
+  .spinner{width:32px;height:32px;border:2px solid rgba(255,215,100,.15);border-top-color:#ffd764;border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 16px;}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  @media(max-width:700px){
+    .gh-table th:nth-child(5),.gh-table td:nth-child(5),
+    .gh-table th:nth-child(6),.gh-table td:nth-child(6){display:none;}
+    .nav{padding:12px 16px;}
+    .page{padding:28px 12px 48px;}
+  }
+</style>
+</head>
+<body>
+<nav class="nav">
+  <a class="nav-logo" href="blackjack.html">♠ BLACKJACK</a>
+  <div class="nav-right">
+    <a class="nav-link" href="blackjack.html">← Back to Table</a>
+    <a class="nav-link" href="transactions.html">🧾 Transactions</a>
+    <a class="nav-link" href="profile.html">Profile</a>
+    <span class="nav-link" onclick="logout()">Sign Out</span>
+  </div>
+</nav>
+
+<div class="page">
+  <div class="page-header">
+    <div class="page-title">Game History</div>
+    <div class="page-sub">Last 100 hands played</div>
+  </div>
+  <div id="statsSection"></div>
+  <div id="content">
+    <div class="loading"><div class="spinner"></div>Loading game history...</div>
+  </div>
+</div>
+
+<script src="cookie-banner.js"></script>
+<script>
+const API = 'https://blackjack-casino-production.up.railway.app/api';
+const token = localStorage.getItem('bj_token');
+if (!token) window.location.href = 'login.html';
+
+function logout(){ localStorage.removeItem('bj_token'); localStorage.removeItem('bj_user'); window.location.href='login.html'; }
+
+function formatDate(dateStr) {
+  if (!dateStr) return '—';
+  const d = new Date(dateStr);
+  return d.toLocaleDateString('en-US',{month:'short',day:'numeric'}) + ' ' +
+    d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
+}
+
+function resultBadge(result) {
+  const r = (result||'').toLowerCase();
+  if (r === 'blackjack') return '<span class="badge badge-blackjack">⭐ Blackjack</span>';
+  if (['win','dealer_bust','double_win','split_win'].includes(r)) return '<span class="badge badge-win">Win</span>';
+  if (r === 'push') return '<span class="badge badge-push">Push</span>';
+  return '<span class="badge badge-loss">Loss</span>';
+}
+
+function profitDisplay(bet, payout) {
+  const profit = (payout||0) - (bet||0);
+  if (profit > 0) return `<span class="payout-pos">+$${profit.toLocaleString()}</span>`;
+  if (profit < 0) return `<span class="payout-neg">-$${Math.abs(profit).toLocaleString()}</span>`;
+  return `<span class="payout-zero">$0</span>`;
+}
+
+function isWin(result) {
+  return ['win','dealer_bust','double_win','split_win','blackjack'].includes((result||'').toLowerCase());
+}
+
+async function loadHistory() {
+  try {
+    const res = await fetch(`${API}/game-history`, { headers: { Authorization: 'Bearer ' + token } });
+    if (!res.ok) { document.getElementById('content').innerHTML = '<div class="loading">Failed to load history.</div>'; return; }
+    const data = await res.json();
+
+    if (!data.length) {
+      document.getElementById('statsSection').innerHTML = '';
+      document.getElementById('content').innerHTML = `
+        <div class="empty-state">
+          <div class="empty-icon">🃏</div>
+          <div class="empty-title">No Games Played Yet</div>
+          <div class="empty-sub">Your hand history will appear here after you play.</div>
+        </div>`;
+      return;
+    }
+
+    // Summary stats
+    const totalHands = data.length;
+    const wins = data.filter(g => isWin(g.result)).length;
+    const winRate = Math.round(wins / totalHands * 100);
+    const biggestWin = Math.max(...data.map(g => (g.payout||0) - (g.bet||0)));
+    const totalProfit = data.reduce((s, g) => s + ((g.payout||0) - (g.bet||0)), 0);
+    const profitClass = totalProfit >= 0 ? 'green' : 'red';
+    const profitSign = totalProfit >= 0 ? '+' : '';
+
+    document.getElementById('statsSection').innerHTML = `
+      <div class="stats-grid">
+        <div class="stat-card"><div class="stat-val">${totalHands}</div><div class="stat-label">Hands Played</div></div>
+        <div class="stat-card"><div class="stat-val ${winRate>=50?'green':'red'}">${winRate}%</div><div class="stat-label">Win Rate</div></div>
+        <div class="stat-card"><div class="stat-val green">${biggestWin>0?'+$'+biggestWin.toLocaleString():'—'}</div><div class="stat-label">Biggest Win</div></div>
+        <div class="stat-card"><div class="stat-val ${profitClass}">${profitSign}$${Math.abs(totalProfit).toLocaleString()}</div><div class="stat-label">Total Profit/Loss</div></div>
+      </div>`;
+
+    const rows = data.map(g => {
+      const pStr = (g.player_hand||'').replace(/&/g,'&amp;').replace(/</g,'&lt;');
+      const dStr = (g.dealer_hand||'').replace(/&/g,'&amp;').replace(/</g,'&lt;');
+      return `<tr>
+        <td>${resultBadge(g.result)}</td>
+        <td><span style="font-family:'Playfair Display',serif;color:#ffd764;">$${Number(g.bet||0).toLocaleString()}</span></td>
+        <td>${profitDisplay(g.bet, g.payout)}</td>
+        <td class="balance-text">$${Number(g.balance_after||0).toLocaleString()}</td>
+        <td><div class="hand-text" title="${pStr}">${pStr||'—'}</div><div class="hand-text" title="${dStr}" style="color:rgba(255,120,120,.4);">${dStr||'—'}</div></td>
+        <td class="date-text">${formatDate(g.played_at)}</td>
+      </tr>`;
+    }).join('');
+
+    document.getElementById('content').innerHTML = `
+      <div class="card-wrap">
+        <table class="gh-table">
+          <thead><tr>
+            <th>Result</th>
+            <th>Bet</th>
+            <th>Profit/Loss</th>
+            <th>Balance After</th>
+            <th>Hands</th>
+            <th>Date</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+  } catch {
+    document.getElementById('content').innerHTML = '<div class="loading">Could not connect to server.</div>';
+  }
+}
+
+loadHistory();
+</script>
+</body>
+</html>
