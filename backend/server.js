@@ -6,33 +6,28 @@ const mysql      = require('mysql2/promise');
 const bcrypt     = require('bcryptjs');
 const jwt        = require('jsonwebtoken');
 const path       = require('path');
-const nodemailer = require('nodemailer');
 require('dotenv').config();
 
-// ── EMAIL ─────────────────────────────────────────────
-let mailer = null;
-if (process.env.EMAIL_USER && !process.env.EMAIL_USER.includes('REPLACE_ME')) {
-  mailer = nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 587,
-    secure: false,
-    family: 4,
-    dnsLookupIpVersion: 4, // force IPv4 DNS — fixes Railway IPv6 ENETUNREACH
-    tls: { rejectUnauthorized: false },
-    auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
-  });
-  mailer.verify(err => {
-    if (err) console.warn('⚠️  Email not configured properly:', err.message);
-    else console.log('✅ Email (Gmail) ready');
-  });
+// ── EMAIL (Resend) ────────────────────────────────────
+let resendApiKey = null;
+if (process.env.RESEND_API_KEY) {
+  resendApiKey = process.env.RESEND_API_KEY;
+  console.log('✅ Email (Resend) ready');
 } else {
-  console.warn('⚠️  Email not configured — set EMAIL_USER and EMAIL_PASS in .env');
+  console.warn('⚠️  Email not configured — set RESEND_API_KEY in Railway Variables');
 }
 
 async function sendEmail({ to, subject, html }) {
-  if (!mailer) return;
-  try { await mailer.sendMail({ from: `"Blackjack Casino" <${process.env.EMAIL_USER}>`, to, subject, html }); }
-  catch (e) { console.warn('Email send failed:', e.message); }
+  if (!resendApiKey) return;
+  try {
+    const res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${resendApiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from: 'Blackjack Casino <onboarding@resend.dev>', to, subject, html }),
+    });
+    if (!res.ok) { const e = await res.json(); console.warn('Resend error:', e.message); }
+    else console.log('✅ Email sent to', to);
+  } catch (e) { console.warn('Email send failed:', e.message); }
 }
 
 function receiptEmailHTML({ username, chips, amount, newBalance, pkg }) {
