@@ -186,6 +186,23 @@
   .confetti-piece{position:fixed;width:8px;height:8px;opacity:0;animation:confettiFall 2s ease-in forwards;z-index:200;pointer-events:none;border-radius:2px;}
   @keyframes confettiFall{0%{opacity:1;transform:translateY(0) rotate(0)}100%{opacity:0;transform:translateY(100vh) rotate(720deg)}}
 
+  /* WIN ANIMATIONS */
+  @keyframes fall{0%{opacity:1;transform:translateY(0) rotate(0)}100%{opacity:0;transform:translateY(100vh) rotate(720deg)}}
+  @keyframes pop{0%{transform:translate(-50%,-50%) scale(0);opacity:1}100%{transform:translate(-50%,-50%) scale(3);opacity:0}}
+  @keyframes stickerFloat{0%{opacity:1;transform:scale(1)}100%{opacity:0;transform:scale(1.5) translateY(-60px)}}
+
+  /* CARD ANIMATIONS */
+  @keyframes cardFlip{from{transform:rotateY(90deg) scale(0.8);opacity:0}to{transform:rotateY(0) scale(1);opacity:1}}
+  @keyframes cardSpin{from{transform:rotate(360deg) scale(0.5);opacity:0}to{transform:rotate(0) scale(1);opacity:1}}
+  @keyframes cardBounce{0%{transform:translateY(-50px) scale(0.8);opacity:0}70%{transform:translateY(5px) scale(1.05)}100%{transform:translateY(0) scale(1);opacity:1}}
+
+  /* DEALER AVATAR */
+  .dealer-avatar{position:absolute;top:8px;left:50%;transform:translateX(-50%);font-size:22px;line-height:1;z-index:5;}
+
+  /* STICKER PANEL */
+  #stickerPanel{position:fixed;bottom:80px;right:20px;z-index:100;}
+  #stickerTray{display:none;position:absolute;bottom:44px;right:0;background:rgba(0,0,0,.9);border:1px solid rgba(255,215,100,.2);border-radius:10px;padding:8px;flex-wrap:wrap;gap:4px;width:160px;}
+
   /* SHUFFLE NOTICE */
   .shuffle-notice{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,.85);border:1px solid rgba(255,215,100,.4);border-radius:8px;padding:12px 24px;color:#ffd764;font-size:13px;letter-spacing:3px;opacity:0;transition:opacity .4s;pointer-events:none;z-index:20;}
   .shuffle-notice.show{opacity:1;}
@@ -306,6 +323,7 @@
     <div class="shoe-bar"><div class="shoe-fill" id="shoeBar" style="height:100%"></div></div>
     <div class="shuffle-notice" id="shuffleNotice">🔀 Shuffling Shoe...</div>
 
+    <div class="dealer-avatar" id="dealerAvatar">🎩</div>
     <div class="dealer-zone">
       <div class="zone-label">Dealer</div>
       <div class="hand" id="dealerHand">
@@ -411,6 +429,12 @@
   </div>
 </div>
 
+<!-- Sticker Panel -->
+<div id="stickerPanel">
+  <button onclick="toggleStickers()" style="background:rgba(0,0,0,.6);border:1px solid rgba(255,215,100,.3);color:#ffd764;padding:8px 12px;border-radius:8px;cursor:pointer;font-size:18px;" title="Reaction Stickers">😎</button>
+  <div id="stickerTray"></div>
+</div>
+
 <!-- Achievement toasts -->
 <div class="ach-container" id="achContainer"></div>
 <div class="toast" id="toast"></div>
@@ -420,6 +444,149 @@ const API = 'https://blackjack-casino-production.up.railway.app/api';
 const token = localStorage.getItem('bj_token');
 if (!token) window.location.href = 'index.html';
 let userData = JSON.parse(localStorage.getItem('bj_user') || '{}');
+
+// ── COSMETICS ──────────────────────────────────────
+let equippedCosmetics = { card_back: 'classic_red', felt: 'green', chip: 'classic', theme: 'default', win_anim: 'confetti', badge: null, border: null, sticker: 'classic_pack', name_color: null, card_anim: 'classic', chip_sound: 'classic', dealer: 'classic_butler' };
+
+async function loadCosmetics() {
+  try {
+    const res = await fetch(`${API}/cosmetics/equipped`, { headers: { Authorization: 'Bearer ' + token } });
+    if (res.ok) equippedCosmetics = await res.json();
+    applyCosmetics();
+  } catch {}
+}
+
+function applyCosmetics() {
+  applyTheme(equippedCosmetics.theme || 'default');
+  const dealerEl = document.getElementById('dealerAvatar');
+  if (dealerEl) {
+    const avatars = { classic_butler: '🎩', robot: '🤖', pirate: '🏴‍☠️', wizard: '🧙', ninja: '🥷' };
+    dealerEl.textContent = avatars[equippedCosmetics.dealer] || '🎩';
+  }
+  buildStickerTray();
+}
+
+function applyTheme(theme) {
+  const themes = {
+    default:    { bg: '#0a3d1a', felt: 'radial-gradient(ellipse 90% 80% at 50% 55%,#1a5c2a 0%,#0f3d1a 50%,#0a2e13 100%)' },
+    vegas_night:{ bg: '#1a0533', felt: 'radial-gradient(ellipse 90% 80% at 50% 55%,#2d0a55 0%,#1a0533 50%,#0d0022 100%)' },
+    neon_city:  { bg: '#001a33', felt: 'radial-gradient(ellipse 90% 80% at 50% 55%,#003355 0%,#001a33 50%,#00111f 100%)' },
+    egypt:      { bg: '#2d1a00', felt: 'radial-gradient(ellipse 90% 80% at 50% 55%,#5c3300 0%,#3d2200 50%,#1a0e00 100%)' },
+    space:      { bg: '#000d1a', felt: 'radial-gradient(ellipse 90% 80% at 50% 55%,#001133 0%,#000d1a 50%,#00060d 100%)' },
+    pirate:     { bg: '#1a0d00', felt: 'radial-gradient(ellipse 90% 80% at 50% 55%,#2d1a00 0%,#1a0d00 50%,#0d0600 100%)' },
+  };
+  const t = themes[theme] || themes.default;
+  document.body.style.background = t.bg;
+  const tableEl = document.getElementById('tableEl');
+  if (tableEl) tableEl.style.background = t.felt;
+}
+
+function triggerWinAnimation() {
+  const anim = equippedCosmetics.win_anim || 'confetti';
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:9999;overflow:hidden;';
+  document.body.appendChild(overlay);
+
+  if (anim === 'confetti' || anim === 'gold_coins') {
+    const colors = anim === 'gold_coins'
+      ? ['#ffd700','#c9a227','#ffed4a','#b8860b']
+      : ['#ffd764','#4cff91','#ff6b6b','#5dade2','#af7ac5'];
+    for (let i = 0; i < 60; i++) {
+      setTimeout(() => {
+        const p = document.createElement('div');
+        p.style.cssText = `position:absolute;width:8px;height:8px;background:${colors[Math.floor(Math.random()*colors.length)]};left:${Math.random()*100}%;top:-10px;border-radius:${anim==='gold_coins'?'50%':'2px'};animation:fall 1.5s ease-in forwards;`;
+        overlay.appendChild(p);
+      }, Math.random() * 500);
+    }
+  } else if (anim === 'fireworks') {
+    overlay.innerHTML = '<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:80px;animation:pop 0.5s ease-out forwards;">🎆</div>';
+  } else if (anim === 'lightning') {
+    overlay.innerHTML = '<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:80px;animation:pop 0.5s ease-out forwards;">⚡</div>';
+  } else if (anim === 'dragon') {
+    overlay.innerHTML = '<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:80px;animation:pop 0.5s ease-out forwards;">🐉</div>';
+  }
+
+  setTimeout(() => overlay.remove(), 2500);
+}
+
+// ── STICKERS ───────────────────────────────────────
+const STICKER_PACKS = {
+  classic_pack: ['😎','🔥','💀','🤑','😂'],
+  hype_pack:    ['🚀','👑','💪','⚡','🎯'],
+  savage_pack:  ['😤','🗿','🤡','💅','🫡'],
+};
+
+function buildStickerTray() {
+  const pack = equippedCosmetics.sticker || 'classic_pack';
+  const stickers = STICKER_PACKS[pack] || STICKER_PACKS.classic_pack;
+  const tray = document.getElementById('stickerTray');
+  if (tray) {
+    tray.innerHTML = stickers.map(s => `<button onclick="sendSticker('${s}')" style="font-size:24px;background:none;border:none;cursor:pointer;padding:4px;border-radius:6px;">${s}</button>`).join('');
+  }
+}
+
+function toggleStickers() {
+  const tray = document.getElementById('stickerTray');
+  if (tray) {
+    const isVisible = tray.style.display === 'flex';
+    tray.style.display = isVisible ? 'none' : 'flex';
+    tray.style.flexWrap = 'wrap';
+  }
+}
+
+function sendSticker(emoji) {
+  const el = document.createElement('div');
+  el.textContent = emoji;
+  el.style.cssText = `position:fixed;font-size:48px;left:${30+Math.random()*40}%;top:${20+Math.random()*40}%;z-index:9999;pointer-events:none;animation:stickerFloat 2s ease-out forwards;`;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 2000);
+  const tray = document.getElementById('stickerTray');
+  if (tray) tray.style.display = 'none';
+}
+
+// ── CHIP SOUNDS ────────────────────────────────────
+function playChipSound() {
+  try {
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    const sound = equippedCosmetics.chip_sound || 'classic';
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain); gain.connect(audioCtx.destination);
+    if (sound === 'classic') {
+      osc.frequency.setValueAtTime(800, audioCtx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(400, audioCtx.currentTime + 0.1);
+      gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.15);
+    } else if (sound === 'futuristic') {
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(200, audioCtx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(800, audioCtx.currentTime + 0.1);
+      gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.2);
+    } else if (sound === 'coin_drop') {
+      osc.frequency.setValueAtTime(1200, audioCtx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(300, audioCtx.currentTime + 0.3);
+      gain.gain.setValueAtTime(0.4, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.3);
+    } else if (sound === 'bling') {
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(1500, audioCtx.currentTime);
+      osc.frequency.setValueAtTime(2000, audioCtx.currentTime + 0.05);
+      gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.4);
+    }
+    osc.start(); osc.stop(audioCtx.currentTime + 0.5);
+  } catch {}
+}
+
+// ── CARD ANIM ──────────────────────────────────────
+function getCardAnimStyle() {
+  const anim = equippedCosmetics.card_anim || 'classic';
+  if (anim === 'slow_reveal') return 'animation:cardFlip 0.8s ease forwards;';
+  if (anim === 'spin_flip')   return 'animation:cardSpin 0.5s ease forwards;';
+  if (anim === 'bounce')      return 'animation:cardBounce 0.4s ease forwards;';
+  return 'animation:cardFlip 0.3s ease forwards;'; // classic
+}
 
 // ── AUDIO ──────────────────────────────────────────
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -603,6 +770,7 @@ function enableActions(canDouble,canSplitHand){
 const RED=new Set(['♥','♦']);
 function buildCardEl(card,faceDown=false){
   const w=document.createElement('div'); w.className='card-wrapper dealing'; w.dataset.faceDown=faceDown?'1':'0';
+  w.style.cssText = getCardAnimStyle();
   const inner=document.createElement('div'); inner.className='card-inner'+(faceDown?' flipped':'');
   const front=document.createElement('div'); front.className='card-face '+(RED.has(card.suit)?'red':'black');
   const top=document.createElement('div'); top.className='card-corner'; top.innerHTML=`<span class="card-rank">${card.rank}</span><span class="card-suit-small">${card.suit}</span>`;
@@ -638,7 +806,7 @@ function renderPlayerHands(){
 }
 
 // ── BET ────────────────────────────────────────────
-function placeBet(amount){ if(gamePhase!=='bet') return; if(audioCtx.state==='suspended') audioCtx.resume(); if(currentBet+amount>balance){showToast('Insufficient balance');return;} currentBet+=amount; playTone('chip'); updateUI(); document.getElementById('dealBtn').disabled=false; }
+function placeBet(amount){ if(gamePhase!=='bet') return; if(audioCtx.state==='suspended') audioCtx.resume(); if(currentBet+amount>balance){showToast('Insufficient balance');return;} currentBet+=amount; playChipSound(); updateUI(); document.getElementById('dealBtn').disabled=false; }
 function clearBet(){ if(gamePhase!=='bet') return; currentBet=0; updateUI(); document.getElementById('dealBtn').disabled=true; }
 
 // ── DEAL ───────────────────────────────────────────
@@ -824,7 +992,7 @@ async function dealerPlay(){
     showResultPopup(result===('split_win')?'win':'push',`Split: ${wins}W ${losses}L`,profit>=0?'+$'+profit:'-$'+Math.abs(profit),profit);
     saveResult(result,totalBet,totalPayout);
     playTone(profit>0?'win':'lose');
-    if(profit>0){spawnConfetti();speak('You win!');}else speak('Dealer wins.');
+    if(profit>0){spawnConfetti();triggerWinAnimation();speak('You win!');}else speak('Dealer wins.');
     return;
   }
 }
@@ -849,7 +1017,7 @@ function endRound(result){
 
   showResultPopup(cls,titles[result]||'Done',subs[result]||'',profit);
   playTone(['win','blackjack','dealer_bust','double_win'].includes(result)?'win':'lose');
-  if(['win','blackjack','dealer_bust','double_win'].includes(result)) spawnConfetti();
+  if(['win','blackjack','dealer_bust','double_win'].includes(result)) { spawnConfetti(); triggerWinAnimation(); }
 }
 
 function showResultPopup(cls,title,sub,profit){
@@ -908,7 +1076,7 @@ function toggleMobileMenu(){ document.getElementById('mobileMenu').classList.tog
 document.addEventListener('click', e => { const m=document.getElementById('mobileMenu'); if(m.classList.contains('open')&&!m.contains(e.target)&&!e.target.closest('.hamburger')) m.classList.remove('open'); });
 
 // ── INIT ───────────────────────────────────────────
-buildShoe(6); loadUser(); setStatus('Place your bet and deal'); enableBetting(true);
+buildShoe(6); loadUser(); loadCosmetics(); setStatus('Place your bet and deal'); enableBetting(true);
 document.addEventListener('click',()=>{if(audioCtx.state==='suspended') audioCtx.resume();},{once:true});
 </script>
 </body>

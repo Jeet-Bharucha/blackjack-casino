@@ -203,9 +203,15 @@ async function connectDB() {
       date_of_birth  DATE          NULL,
       verify_status  VARCHAR(20)   NOT NULL DEFAULT 'unverified',
       is_admin       TINYINT(1)    NOT NULL DEFAULT 0,
-      id_document    MEDIUMTEXT    NULL,
-      selfie_photo   MEDIUMTEXT    NULL,
-      verified_at    DATETIME      NULL
+      id_document         MEDIUMTEXT    NULL,
+      selfie_photo        MEDIUMTEXT    NULL,
+      verified_at         DATETIME      NULL,
+      has_bonus_slot      TINYINT(1)    NOT NULL DEFAULT 0,
+      has_insurance_boost TINYINT(1)    NOT NULL DEFAULT 0,
+      last_bonus_slot_date DATE         NULL,
+      equipped_badge      VARCHAR(50)   NULL,
+      equipped_name_color VARCHAR(30)   NULL,
+      equipped_border     VARCHAR(30)   NULL
     )
   `);
 
@@ -303,8 +309,66 @@ async function connectDB() {
     ('chip',     'classic',       'Classic Chips',  'Standard casino chip design',              0),
     ('chip',     'neon',          'Neon Glow',      'Chips that glow in the dark',           1000),
     ('chip',     'gold',          'Gold Chips',     '24K gold plated chip design',           2500),
-    ('chip',     'diamond',       'Diamond Chips',  'Crystal-clear diamond chip design',     5000)
+    ('chip',     'diamond',       'Diamond Chips',  'Crystal-clear diamond chip design',     5000),
+    ('theme','vegas_night','Vegas Night','Neon-lit Vegas strip atmosphere',1500),
+    ('theme','neon_city','Neon City','Cyberpunk neon city theme',2000),
+    ('theme','egypt','Ancient Egypt','Pyramid and pharaoh atmosphere',2500),
+    ('theme','space','Space Casino','Deal cards among the stars',3000),
+    ('theme','pirate','Pirate Ship','High stakes on the high seas',2500),
+    ('win_anim','confetti','Confetti Burst','Classic confetti celebration',0),
+    ('win_anim','gold_coins','Gold Coins Rain','Golden coins rain down on wins',800),
+    ('win_anim','fireworks','Fireworks Show','Spectacular fireworks display',1200),
+    ('win_anim','lightning','Lightning Strike','Electric lightning bolt on wins',1500),
+    ('win_anim','dragon','Dragon Fire','Epic dragon breathes fire on wins',3000),
+    ('badge','high_roller','High Roller','Show your big spender status',500),
+    ('badge','card_shark','Card Shark','You know how to play the game',500),
+    ('badge','lucky_devil','Lucky Devil','Luck is always on your side',750),
+    ('badge','the_ace','The Ace','You are the ace in the deck',1000),
+    ('badge','whale','The Whale','Big money, big plays',2000),
+    ('badge','legend','🌟 Legend','Reserved for the casino elite',5000),
+    ('border','gold_crown','Gold Crown','Majestic gold crown border',1000),
+    ('border','diamond_frame','Diamond Frame','Sparkling diamond border',2500),
+    ('border','neon_glow','Neon Glow Border','Electric neon glow effect',1500),
+    ('border','fire_ring','Fire Ring','Blazing fire border',2000),
+    ('border','platinum','Platinum Ring','Sleek platinum border',3000),
+    ('sticker','classic_pack','Classic Reactions','Basic reaction pack',0),
+    ('sticker','hype_pack','Hype Pack','High energy reactions',750),
+    ('sticker','savage_pack','Savage Pack','Troll your opponents',1000),
+    ('name_color','gold','Gold Name','Your name shines in gold',500),
+    ('name_color','crimson','Crimson Name','Bold red username',500),
+    ('name_color','cyan','Cyan Name','Electric cyan username',500),
+    ('name_color','neon_green','Neon Green Name','Matrix-style green',750),
+    ('name_color','purple','Royal Purple Name','Regal purple username',750),
+    ('name_color','rainbow','Rainbow Name','Animated rainbow username',3000),
+    ('card_anim','classic','Classic Flip','Standard card deal animation',0),
+    ('card_anim','slow_reveal','Slow Reveal','Dramatic slow card reveal',600),
+    ('card_anim','spin_flip','Spin Flip','Cards spin in dramatically',1000),
+    ('card_anim','bounce','Bounce In','Cards bounce onto the table',800),
+    ('chip_sound','classic','Classic Casino','Traditional chip sounds',0),
+    ('chip_sound','futuristic','Futuristic','Sci-fi electronic chip sounds',600),
+    ('chip_sound','coin_drop','Coin Drop','Heavy gold coin dropping',400),
+    ('chip_sound','bling','Bling','Luxury high-end sounds',800),
+    ('dealer','classic_butler','Classic Butler','The traditional casino dealer',0),
+    ('dealer','robot','Robot Dealer','A futuristic AI dealer',1000),
+    ('dealer','pirate','Pirate','Arrr, place your bets!',1500),
+    ('dealer','wizard','Wizard','A mystical card dealer',2000),
+    ('dealer','ninja','Ninja','Silent but deadly dealer',2500),
+    ('perk','bonus_slot','Extra Daily Bonus','Claim your daily bonus twice per day',3000),
+    ('perk','insurance_boost','Insurance Boost','Improved insurance payout: 3:2 instead of 2:1',2500)
   `);
+
+  // ALTER TABLE for existing deployments — safe to run every boot
+  const alterColumns = [
+    "ALTER TABLE users ADD COLUMN has_bonus_slot      TINYINT(1)  NOT NULL DEFAULT 0    AFTER verified_at",
+    "ALTER TABLE users ADD COLUMN has_insurance_boost TINYINT(1)  NOT NULL DEFAULT 0    AFTER has_bonus_slot",
+    "ALTER TABLE users ADD COLUMN last_bonus_slot_date DATE        NULL                  AFTER has_insurance_boost",
+    "ALTER TABLE users ADD COLUMN equipped_badge      VARCHAR(50) NULL                  AFTER last_bonus_slot_date",
+    "ALTER TABLE users ADD COLUMN equipped_name_color VARCHAR(30) NULL                  AFTER equipped_badge",
+    "ALTER TABLE users ADD COLUMN equipped_border     VARCHAR(30) NULL                  AFTER equipped_name_color",
+  ];
+  for (const sql of alterColumns) {
+    try { await db.execute(sql); } catch (e) { /* column already exists — ignore */ }
+  }
 
   console.log('✅ MySQL connected and tables ready');
 }
@@ -389,16 +453,21 @@ function extractStats(u) {
 
 function publicUser(u, achievements = []) {
   return {
-    username:     u.username,
-    displayName:  u.display_name || u.username,
-    avatar:       u.avatar || null,
-    balance:      u.balance,
-    vipTier:      u.vip_tier,
-    tierProgress: getTierProgress(u.total_won || 0),
-    stats:        extractStats(u),
+    username:           u.username,
+    displayName:        u.display_name || u.username,
+    avatar:             u.avatar || null,
+    balance:            u.balance,
+    vipTier:            u.vip_tier,
+    tierProgress:       getTierProgress(u.total_won || 0),
+    stats:              extractStats(u),
     achievements,
-    createdAt:    u.created_at,
-    verifyStatus: u.verify_status || 'unverified',
+    createdAt:          u.created_at,
+    verifyStatus:       u.verify_status || 'unverified',
+    hasBonusSlot:       !!u.has_bonus_slot,
+    hasInsuranceBoost:  !!u.has_insurance_boost,
+    equippedBadge:      u.equipped_badge || null,
+    equippedNameColor:  u.equipped_name_color || null,
+    equippedBorder:     u.equipped_border || null,
   };
 }
 
@@ -751,13 +820,27 @@ app.post('/api/daily-bonus', auth, async (req, res) => {
     const u = rows[0];
     const today = new Date().toISOString().slice(0,10);
     const lastBonus = u.last_daily_bonus ? u.last_daily_bonus.toISOString().slice(0,10) : null;
-    if (lastBonus === today) return res.status(400).json({ error: 'Already claimed today' });
-    const yesterday = new Date(Date.now()-86400000).toISOString().slice(0,10);
-    const newStreak = lastBonus === yesterday ? u.streak + 1 : 1;
-    const bonus = getDailyBonus(newStreak, u.vip_tier);
-    await db.execute('UPDATE users SET balance=balance+?, streak=?, last_daily_bonus=? WHERE id=?', [bonus, newStreak, today, u.id]);
-    const [updated] = await db.execute('SELECT balance FROM users WHERE id=?', [u.id]);
-    res.json({ bonus, newBalance: updated[0].balance, streak: newStreak });
+    const lastSlotDate = u.last_bonus_slot_date ? u.last_bonus_slot_date.toISOString().slice(0,10) : null;
+
+    // First claim of the day
+    if (lastBonus !== today) {
+      const yesterday = new Date(Date.now()-86400000).toISOString().slice(0,10);
+      const newStreak = lastBonus === yesterday ? u.streak + 1 : 1;
+      const bonus = getDailyBonus(newStreak, u.vip_tier);
+      await db.execute('UPDATE users SET balance=balance+?, streak=?, last_daily_bonus=? WHERE id=?', [bonus, newStreak, today, u.id]);
+      const [updated] = await db.execute('SELECT balance FROM users WHERE id=?', [u.id]);
+      return res.json({ bonus, newBalance: updated[0].balance, streak: newStreak, isSecondClaim: false });
+    }
+
+    // Second claim — only if user has bonus_slot perk and hasn't used it today
+    if (u.has_bonus_slot && lastSlotDate !== today) {
+      const bonus = getDailyBonus(u.streak, u.vip_tier);
+      await db.execute('UPDATE users SET balance=balance+?, last_bonus_slot_date=? WHERE id=?', [bonus, today, u.id]);
+      const [updated] = await db.execute('SELECT balance FROM users WHERE id=?', [u.id]);
+      return res.json({ bonus, newBalance: updated[0].balance, streak: u.streak, isSecondClaim: true });
+    }
+
+    return res.status(400).json({ error: 'Already claimed today' });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
 });
 
@@ -927,7 +1010,7 @@ app.get('/api/profile/:username', async (req, res) => {
 app.get('/api/leaderboard', async (req, res) => {
   try {
     const [rows] = await db.execute(`
-      SELECT username, display_name, avatar, balance, wins, losses, blackjacks, total_hands, total_won, vip_tier
+      SELECT username, display_name, avatar, balance, wins, losses, blackjacks, total_hands, total_won, vip_tier, equipped_badge, equipped_name_color
       FROM users ORDER BY balance DESC LIMIT 10
     `);
     res.json(rows.map((u,i) => ({
@@ -936,6 +1019,8 @@ app.get('/api/leaderboard', async (req, res) => {
       blackjacks: u.blackjacks, totalHands: u.total_hands, points: u.total_won,
       vipTier: u.vip_tier,
       winRate: u.total_hands > 0 ? Math.round(u.wins/u.total_hands*100) : 0,
+      equippedBadge: u.equipped_badge || null,
+      equippedNameColor: u.equipped_name_color || null,
     })));
   } catch { res.status(500).json({ error: 'Server error' }); }
 });
@@ -1211,13 +1296,21 @@ app.get('/api/cosmetics/shop', auth, async (req, res) => {
   try {
     const [items] = await db.execute('SELECT * FROM cosmetics ORDER BY type, price');
     const [owned] = await db.execute('SELECT cosmetic_id, is_equipped FROM user_cosmetics WHERE user_id=?', [req.user.id]);
+    const [userRows] = await db.execute('SELECT has_bonus_slot, has_insurance_boost FROM users WHERE id=?', [req.user.id]);
+    const u = userRows[0] || {};
     const ownedMap = {};
     owned.forEach(o => { ownedMap[o.cosmetic_id] = { owned: true, equipped: !!o.is_equipped }; });
-    res.json(items.map(item => ({
-      ...item,
-      owned:   !!ownedMap[item.id],
-      equipped: ownedMap[item.id]?.equipped || false,
-    })));
+    res.json(items.map(item => {
+      let isOwned = !!ownedMap[item.id];
+      let isEquipped = ownedMap[item.id]?.equipped || false;
+      // Perks: check user columns instead of user_cosmetics
+      if (item.type === 'perk') {
+        if (item.key_name === 'bonus_slot')      isOwned = !!u.has_bonus_slot;
+        if (item.key_name === 'insurance_boost') isOwned = !!u.has_insurance_boost;
+        isEquipped = isOwned; // perks are "equipped" (active) once purchased
+      }
+      return { ...item, owned: isOwned, equipped: isEquipped };
+    }));
   } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
 
@@ -1227,6 +1320,22 @@ app.post('/api/cosmetics/buy', auth, async (req, res) => {
     const [items] = await db.execute('SELECT * FROM cosmetics WHERE id=?', [cosmeticId]);
     if (!items.length) return res.status(404).json({ error: 'Item not found' });
     const item = items[0];
+
+    // Handle perks differently — they update user columns instead of user_cosmetics
+    if (item.type === 'perk') {
+      const col = item.key_name === 'bonus_slot' ? 'has_bonus_slot'
+                : item.key_name === 'insurance_boost' ? 'has_insurance_boost'
+                : null;
+      if (!col) return res.status(400).json({ error: 'Unknown perk' });
+      const [userRows] = await db.execute(`SELECT ${col}, balance FROM users WHERE id=?`, [req.user.id]);
+      if (!userRows.length) return res.status(404).json({ error: 'Not found' });
+      if (userRows[0][col]) return res.status(400).json({ error: 'You already own this perk' });
+      if (userRows[0].balance < item.price) return res.status(400).json({ error: 'Insufficient balance' });
+      await db.execute(`UPDATE users SET ${col}=1, balance=balance-? WHERE id=?`, [item.price, req.user.id]);
+      const [updated] = await db.execute('SELECT balance FROM users WHERE id=?', [req.user.id]);
+      return res.json({ success: true, newBalance: updated[0].balance, item });
+    }
+
     const [owned] = await db.execute('SELECT id FROM user_cosmetics WHERE user_id=? AND cosmetic_id=?', [req.user.id, cosmeticId]);
     if (owned.length) return res.status(400).json({ error: 'Already owned' });
     const [userRows] = await db.execute('SELECT balance FROM users WHERE id=?', [req.user.id]);
@@ -1244,6 +1353,8 @@ app.post('/api/cosmetics/equip', auth, async (req, res) => {
     const [items] = await db.execute('SELECT * FROM cosmetics WHERE id=?', [cosmeticId]);
     if (!items.length) return res.status(404).json({ error: 'Item not found' });
     const item = items[0];
+    // Perks cannot be equipped/unequipped — they are always active
+    if (item.type === 'perk') return res.status(400).json({ error: 'Perks are activated automatically on purchase' });
     const [owned] = await db.execute('SELECT id FROM user_cosmetics WHERE user_id=? AND cosmetic_id=?', [req.user.id, cosmeticId]);
     if (!owned.length) return res.status(400).json({ error: 'Item not owned' });
     // Unequip all items of this type first
@@ -1252,6 +1363,14 @@ app.post('/api/cosmetics/equip', auth, async (req, res) => {
       SET uc.is_equipped=0 WHERE uc.user_id=? AND c.type=?
     `, [req.user.id, item.type]);
     await db.execute('UPDATE user_cosmetics SET is_equipped=1 WHERE user_id=? AND cosmetic_id=?', [req.user.id, cosmeticId]);
+    // Also persist badge, name_color, and border to user table for quick access
+    if (item.type === 'badge') {
+      await db.execute('UPDATE users SET equipped_badge=? WHERE id=?', [item.key_name, req.user.id]);
+    } else if (item.type === 'name_color') {
+      await db.execute('UPDATE users SET equipped_name_color=? WHERE id=?', [item.key_name, req.user.id]);
+    } else if (item.type === 'border') {
+      await db.execute('UPDATE users SET equipped_border=? WHERE id=?', [item.key_name, req.user.id]);
+    }
     res.json({ success: true, equipped: item });
   } catch (e) { console.error(e); res.status(500).json({ error: 'Server error' }); }
 });
@@ -1262,7 +1381,7 @@ app.get('/api/cosmetics/equipped', auth, async (req, res) => {
       SELECT c.type, c.key_name, c.name FROM user_cosmetics uc
       JOIN cosmetics c ON c.id=uc.cosmetic_id WHERE uc.user_id=? AND uc.is_equipped=1
     `, [req.user.id]);
-    const equipped = { card_back: 'classic_red', felt: 'green', chip: 'classic' };
+    const equipped = { card_back: 'classic_red', felt: 'green', chip: 'classic', theme: 'default', win_anim: 'confetti', badge: null, border: null, sticker: 'classic_pack', name_color: null, card_anim: 'classic', chip_sound: 'classic', dealer: 'classic_butler' };
     rows.forEach(r => { equipped[r.type] = r.key_name; });
     res.json(equipped);
   } catch (e) { res.status(500).json({ error: 'Server error' }); }

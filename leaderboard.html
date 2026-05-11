@@ -54,6 +54,7 @@
   .refresh-btn:hover{border-color:rgba(255,215,100,.5);color:#ffd764;}
   .refresh-indicator{display:inline-block;width:6px;height:6px;background:#4cff91;border-radius:50%;margin-left:8px;animation:pulse 2s infinite;}
   @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+  @keyframes lbRainbow{0%{color:#ff0000}16%{color:#ff8800}33%{color:#ffff00}50%{color:#00ff00}66%{color:#0088ff}83%{color:#8800ff}100%{color:#ff0000}}
 </style>
 </head>
 <body>
@@ -107,6 +108,17 @@ if (userData.username) {
 
 const medals=['🥇','🥈','🥉'];
 
+const NAME_COLOR_CSS = {
+  gold:      'color:#ffd700;text-shadow:0 0 8px rgba(255,215,0,.5);',
+  crimson:   'color:#dc143c;',
+  cyan:      'color:#00ffff;text-shadow:0 0 8px rgba(0,255,255,.5);',
+  neon_green:'color:#39ff14;text-shadow:0 0 8px rgba(57,255,20,.5);',
+  purple:    'color:#8b00ff;',
+  rainbow:   'animation:lbRainbow 2s linear infinite;',
+};
+
+const BADGE_LABEL = { high_roller:'High Roller', card_shark:'Card Shark', lucky_devil:'Lucky Devil', the_ace:'The Ace', whale:'The Whale', legend:'🌟 Legend' };
+
 async function loadLeaderboard() {
   try {
     const res = await fetch(`${API}/leaderboard`);
@@ -122,8 +134,12 @@ async function loadLeaderboard() {
         ?`<div class="player-avatar"><img src="${p.avatar}" alt=""/></div>`
         :`<div class="player-avatar">${esc((p.displayName||p.username)[0].toUpperCase())}</div>`;
       const displayName=p.displayName||p.username;
+      const nameStyle = p.equippedNameColor && NAME_COLOR_CSS[p.equippedNameColor] ? NAME_COLOR_CSS[p.equippedNameColor] : '';
+      const badgeHTML = p.equippedBadge && BADGE_LABEL[p.equippedBadge]
+        ? `<span style="font-size:9px;color:#ffd764;background:rgba(255,215,100,.1);border:1px solid rgba(255,215,100,.2);border-radius:3px;padding:1px 6px;margin-left:6px;">${BADGE_LABEL[p.equippedBadge]}</span>`
+        : '';
       return `<tr class="${isMe?'is-me':''} ${rankClass}">
-        <td><div class="rank-cell"><span class="rank-num">${p.rank<=3?medals[p.rank-1]:p.rank}</span>${avatarHTML}<span class="player-name ${isMe?'is-me':''}">${esc(displayName)}</span><span class="vip-badge vip-${p.vipTier||'Bronze'}">${p.vipTier||'Bronze'}</span></div></td>
+        <td><div class="rank-cell"><span class="rank-num">${p.rank<=3?medals[p.rank-1]:p.rank}</span>${avatarHTML}<div><span class="player-name ${isMe?'is-me':''}" style="${nameStyle}">${esc(displayName)}</span>${badgeHTML}</div><span class="vip-badge vip-${p.vipTier||'Bronze'}">${p.vipTier||'Bronze'}</span></div></td>
         <td><span class="balance-cell">$${p.balance.toLocaleString()}</span></td>
         <td>${(p.points||0).toLocaleString()}</td>
         <td>${p.totalHands}</td>

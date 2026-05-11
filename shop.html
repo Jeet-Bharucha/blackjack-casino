@@ -20,7 +20,7 @@ body{background:#0a0a0f;color:#f0f0f0;font-family:'Georgia',serif;min-height:100
 .page-sub{text-align:center;color:rgba(255,255,255,.4);font-size:14px;letter-spacing:1px;margin-bottom:40px;}
 
 .shop-layout{display:grid;grid-template-columns:200px 1fr;gap:28px;}
-.category-sidebar{position:sticky;top:80px;height:fit-content;}
+.category-sidebar{position:sticky;top:80px;height:fit-content;max-height:calc(100vh - 100px);overflow-y:auto;}
 .cat-item{padding:11px 16px;border-radius:8px;cursor:pointer;font-size:13px;letter-spacing:1px;color:rgba(255,255,255,.5);transition:.2s;margin-bottom:6px;border:1px solid transparent;}
 .cat-item:hover{color:#fff;background:rgba(255,255,255,.04);}
 .cat-item.active{color:#ffd764;background:rgba(201,162,39,.08);border-color:rgba(201,162,39,.2);}
@@ -39,12 +39,14 @@ body{background:#0a0a0f;color:#f0f0f0;font-family:'Georgia',serif;min-height:100
 .item-badge{position:absolute;top:10px;right:10px;padding:2px 8px;border-radius:20px;font-size:9px;font-weight:700;letter-spacing:1px;}
 .badge-owned{background:rgba(76,255,145,.2);color:#4cff91;border:1px solid rgba(76,255,145,.3);}
 .badge-equipped{background:#4cff91;color:#000;}
+.badge-activated{background:rgba(255,165,0,.25);color:#ffa500;border:1px solid rgba(255,165,0,.4);}
 .btn{padding:9px 20px;border:none;border-radius:7px;cursor:pointer;font-size:12px;font-weight:700;letter-spacing:1px;transition:.2s;width:100%;}
 .btn-gold{background:linear-gradient(135deg,#c9a227,#ffd764);color:#1a0a00;}
 .btn-gold:hover{filter:brightness(1.1);}
 .btn-gold:disabled{opacity:.35;cursor:not-allowed;}
 .btn-green{background:linear-gradient(135deg,#00aa44,#4cff91);color:#000;}
 .btn-green:hover{filter:brightness(1.1);}
+.btn-orange{background:linear-gradient(135deg,#cc7700,#ffaa00);color:#000;}
 .btn-outline{background:transparent;border:1px solid rgba(255,255,255,.2);color:rgba(255,255,255,.5);}
 
 /* Card back previews */
@@ -64,14 +66,46 @@ body{background:#0a0a0f;color:#f0f0f0;font-family:'Georgia',serif;min-height:100
 .preview-neon{background:radial-gradient(circle,#0ff 30%,#00ff88 30%,#00ff88 38%,#111 38%);box-shadow:0 0 20px #0ff8;}
 .preview-gold_chip{background:radial-gradient(circle,#ffd700 30%,#b8860b 30%,#b8860b 38%,#ffd700 38%);}
 .preview-diamond_chip{background:radial-gradient(circle,#fff 30%,#89f 30%,#89f 38%,#dde 38%);box-shadow:0 0 16px rgba(136,153,255,.5);}
+/* Theme previews */
+.preview-vegas_night{background:linear-gradient(135deg,#1a0533,#4a006e);box-shadow:inset 0 0 20px rgba(255,0,255,.2);}
+.preview-neon_city{background:linear-gradient(135deg,#001a33,#003355);box-shadow:inset 0 0 20px rgba(0,255,255,.2);}
+.preview-egypt{background:linear-gradient(135deg,#2d1a00,#5c3300);}
+.preview-space{background:linear-gradient(135deg,#000d1a,#001133);}
+.preview-pirate{background:linear-gradient(135deg,#1a0d00,#2d1a00);}
+/* Win anim previews */
+.preview-confetti{background:linear-gradient(135deg,#ff6b6b,#ffd764,#4cff91,#5dade2);}
+.preview-gold_coins{background:radial-gradient(circle,#ffd700 0%,#8b6914 100%);}
+.preview-fireworks{background:linear-gradient(135deg,#0d0033,#330066);}
+.preview-lightning{background:linear-gradient(135deg,#1a1a00,#333300);}
+.preview-dragon{background:linear-gradient(135deg,#330000,#660000);}
+/* Badge previews */
+.preview-badge-generic{background:linear-gradient(135deg,#1a0a00,#3d2200);border:1px solid rgba(255,215,100,.2);}
+/* Border previews */
+.preview-gold_crown{background:transparent;border:4px solid #ffd700;box-shadow:0 0 12px rgba(255,215,0,.5);}
+.preview-diamond_frame{background:transparent;border:4px solid #89f;box-shadow:0 0 12px rgba(136,153,255,.5);}
+.preview-neon_glow{background:transparent;border:4px solid #0ff;box-shadow:0 0 16px rgba(0,255,255,.7);}
+.preview-fire_ring{background:transparent;border:4px solid #ff4400;box-shadow:0 0 16px rgba(255,68,0,.6);}
+.preview-platinum{background:transparent;border:4px solid #e5e4e2;box-shadow:0 0 12px rgba(229,228,226,.4);}
+/* Sticker previews */
+.preview-sticker{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);}
+/* Name color previews */
+.preview-name_color{background:rgba(0,0,0,.5);}
+/* Chip sound / card anim previews */
+.preview-chip_sound{background:linear-gradient(135deg,#0a0a1a,#1a1a33);}
+.preview-card_anim{background:linear-gradient(135deg,#0d0500,#1a0a00);}
+/* Dealer previews */
+.preview-dealer{background:linear-gradient(135deg,#0d1a0d,#1a2d1a);}
+/* Perk previews */
+.preview-perk{background:linear-gradient(135deg,#1a0033,#33006b);border:1px solid rgba(200,100,255,.3);}
 
-.preview-card::after{content:'♠';font-size:24px;color:rgba(255,255,255,.4);}
-.preview-chip-label::after{content:'●';font-size:36px;}
+/* Rainbow name animation */
+@keyframes rainbow{0%{color:#ff0000}16%{color:#ff8800}33%{color:#ffff00}50%{color:#00ff00}66%{color:#0088ff}83%{color:#8800ff}100%{color:#ff0000}}
+.name-rainbow{animation:rainbow 2s linear infinite;}
 
 .toast{position:fixed;bottom:28px;right:28px;background:#1a1a2e;border:1px solid rgba(76,255,145,.4);border-radius:10px;padding:14px 20px;color:#4cff91;font-size:13px;transform:translateY(80px);opacity:0;transition:.3s;z-index:999;}
 .toast.show{transform:translateY(0);opacity:1;}
 
-@media(max-width:700px){.shop-layout{grid-template-columns:1fr;}.category-sidebar{position:static;display:flex;gap:8px;overflow-x:auto;padding-bottom:8px;}.cat-item{flex-shrink:0;}}
+@media(max-width:700px){.shop-layout{grid-template-columns:1fr;}.category-sidebar{position:static;display:flex;gap:8px;overflow-x:auto;padding-bottom:8px;max-height:none;}.cat-item{flex-shrink:0;}}
 </style>
 </head>
 <body>
@@ -98,6 +132,16 @@ body{background:#0a0a0f;color:#f0f0f0;font-family:'Georgia',serif;min-height:100
       <div class="cat-item" onclick="filterCat('card_back')" id="cat-card_back"><span class="cat-icon">🃏</span>Card Backs</div>
       <div class="cat-item" onclick="filterCat('felt')" id="cat-felt"><span class="cat-icon">🟩</span>Table Felt</div>
       <div class="cat-item" onclick="filterCat('chip')" id="cat-chip"><span class="cat-icon">🔵</span>Chip Designs</div>
+      <div class="cat-item" onclick="filterCat('theme')" id="cat-theme"><span class="cat-icon">🎨</span>Table Themes</div>
+      <div class="cat-item" onclick="filterCat('win_anim')" id="cat-win_anim"><span class="cat-icon">🎉</span>Win Animations</div>
+      <div class="cat-item" onclick="filterCat('badge')" id="cat-badge"><span class="cat-icon">🏅</span>Badges &amp; Titles</div>
+      <div class="cat-item" onclick="filterCat('border')" id="cat-border"><span class="cat-icon">🖼️</span>Avatar Borders</div>
+      <div class="cat-item" onclick="filterCat('sticker')" id="cat-sticker"><span class="cat-icon">😎</span>Sticker Packs</div>
+      <div class="cat-item" onclick="filterCat('name_color')" id="cat-name_color"><span class="cat-icon">✨</span>Name Colors</div>
+      <div class="cat-item" onclick="filterCat('card_anim')" id="cat-card_anim"><span class="cat-icon">🎴</span>Card Animations</div>
+      <div class="cat-item" onclick="filterCat('chip_sound')" id="cat-chip_sound"><span class="cat-icon">🔊</span>Chip Sounds</div>
+      <div class="cat-item" onclick="filterCat('dealer')" id="cat-dealer"><span class="cat-icon">🤵</span>Dealer Avatars</div>
+      <div class="cat-item" onclick="filterCat('perk')" id="cat-perk"><span class="cat-icon">⚡</span>Perks</div>
     </div>
     <div>
       <div class="items-grid" id="itemsGrid">
@@ -118,6 +162,50 @@ let allItems = [];
 let currentCat = 'all';
 let myBalance = 0;
 
+const NAME_COLOR_MAP = {
+  gold:      '#ffd700',
+  crimson:   '#dc143c',
+  cyan:      '#00ffff',
+  neon_green:'#39ff14',
+  purple:    '#8b00ff',
+  rainbow:   null, // handled specially
+};
+
+const DEALER_EMOJI = {
+  classic_butler: '🎩',
+  robot:          '🤖',
+  pirate:         '🏴‍☠️',
+  wizard:         '🧙',
+  ninja:          '🥷',
+};
+
+const STICKER_EMOJIS = {
+  classic_pack: ['😎','🔥','💀','🤑','😂'],
+  hype_pack:    ['🚀','👑','💪','⚡','🎯'],
+  savage_pack:  ['😤','🗿','🤡','💅','🫡'],
+};
+
+const WIN_ANIM_EMOJI = {
+  confetti:  '🎊',
+  gold_coins:'🪙',
+  fireworks: '🎆',
+  lightning: '⚡',
+  dragon:    '🐉',
+};
+
+const THEME_EMOJI = {
+  vegas_night:'🌃',
+  neon_city:  '🏙️',
+  egypt:      '🔺',
+  space:      '🚀',
+  pirate:     '🏴‍☠️',
+};
+
+const PERK_ICON = {
+  bonus_slot:      '🎁',
+  insurance_boost: '🛡️',
+};
+
 function showToast(msg, ok = true) {
   const t = document.getElementById('toast');
   t.textContent = msg;
@@ -129,19 +217,51 @@ function showToast(msg, ok = true) {
 
 function previewClass(item) {
   if (item.type === 'card_back') return `preview-${item.key_name}`;
-  if (item.type === 'felt') return `preview-${item.key_name}`;
+  if (item.type === 'felt')      return `preview-${item.key_name}`;
   if (item.type === 'chip') {
-    if (item.key_name === 'gold') return 'preview-gold_chip';
+    if (item.key_name === 'gold')    return 'preview-gold_chip';
     if (item.key_name === 'diamond') return 'preview-diamond_chip';
     return `preview-${item.key_name}`;
   }
+  if (item.type === 'theme')      return `preview-${item.key_name}`;
+  if (item.type === 'win_anim')   return `preview-${item.key_name}`;
+  if (item.type === 'badge')      return 'preview-badge-generic';
+  if (item.type === 'border')     return `preview-${item.key_name}`;
+  if (item.type === 'sticker')    return 'preview-sticker';
+  if (item.type === 'name_color') return 'preview-name_color';
+  if (item.type === 'card_anim')  return 'preview-card_anim';
+  if (item.type === 'chip_sound') return 'preview-chip_sound';
+  if (item.type === 'dealer')     return 'preview-dealer';
+  if (item.type === 'perk')       return 'preview-perk';
   return '';
 }
 
-function previewIcon(item) {
-  if (item.type === 'card_back') return '♠';
-  if (item.type === 'felt') return '';
-  if (item.type === 'chip') return '●';
+function previewInner(item) {
+  if (item.type === 'card_back') return '<span style="font-size:36px;color:rgba(255,255,255,.5);">♠</span>';
+  if (item.type === 'felt')      return '';
+  if (item.type === 'chip')      return '<span style="font-size:36px;color:rgba(255,255,255,.6);">●</span>';
+  if (item.type === 'theme')     return `<span style="font-size:36px;">${THEME_EMOJI[item.key_name] || '🎨'}</span>`;
+  if (item.type === 'win_anim')  return `<span style="font-size:36px;">${WIN_ANIM_EMOJI[item.key_name] || '🎉'}</span>`;
+  if (item.type === 'badge')     return `<span style="font-size:18px;color:#ffd764;font-weight:700;letter-spacing:1px;">${item.name}</span>`;
+  if (item.type === 'border') {
+    const w = item.key_name === 'neon_glow' ? 60 : 64;
+    return `<div style="width:${w}px;height:${w}px;border-radius:50%;"></div>`;
+  }
+  if (item.type === 'sticker') {
+    const emojis = STICKER_EMOJIS[item.key_name] || ['😎'];
+    return `<span style="font-size:22px;letter-spacing:2px;">${emojis.join('')}</span>`;
+  }
+  if (item.type === 'name_color') {
+    if (item.key_name === 'rainbow') {
+      return '<span class="name-rainbow" style="font-size:16px;font-weight:700;letter-spacing:2px;">PLAYER</span>';
+    }
+    const c = NAME_COLOR_MAP[item.key_name] || '#fff';
+    return `<span style="font-size:16px;font-weight:700;color:${c};letter-spacing:2px;text-shadow:0 0 8px ${c}88;">PLAYER</span>`;
+  }
+  if (item.type === 'card_anim') return '<span style="font-size:36px;">🃏</span>';
+  if (item.type === 'chip_sound') return '<span style="font-size:36px;">🔊</span>';
+  if (item.type === 'dealer')    return `<span style="font-size:36px;">${DEALER_EMOJI[item.key_name] || '🤵'}</span>`;
+  if (item.type === 'perk')      return `<span style="font-size:36px;">${PERK_ICON[item.key_name] || '⚡'}</span>`;
   return '';
 }
 
@@ -150,24 +270,41 @@ function renderItems(items) {
     document.getElementById('itemsGrid').innerHTML = `<p style="color:rgba(255,255,255,.3);text-align:center;padding:40px;grid-column:1/-1;">No items in this category</p>`;
     return;
   }
-  document.getElementById('itemsGrid').innerHTML = items.map(item => `
+  document.getElementById('itemsGrid').innerHTML = items.map(item => {
+    const isPerk = item.type === 'perk';
+    const badgeHTML = isPerk && item.owned
+      ? `<div class="item-badge badge-activated">ACTIVE</div>`
+      : item.equipped
+        ? `<div class="item-badge badge-equipped">EQUIPPED</div>`
+        : item.owned
+          ? `<div class="item-badge badge-owned">OWNED</div>`
+          : '';
+
+    return `
     <div class="item-card ${item.equipped ? 'equipped' : item.owned ? 'owned' : ''}" id="card-${item.id}">
-      ${item.equipped ? `<div class="item-badge badge-equipped">EQUIPPED</div>` : item.owned ? `<div class="item-badge badge-owned">OWNED</div>` : ''}
-      <div class="item-preview ${previewClass(item)}" style="background-size:cover;">
-        <span style="font-size:36px;color:rgba(255,255,255,.5);">${previewIcon(item)}</span>
+      ${badgeHTML}
+      <div class="item-preview ${previewClass(item)}">
+        ${previewInner(item)}
       </div>
       <div class="item-name">${item.name}</div>
       <div class="item-desc">${item.description || ''}</div>
-      <div class="item-price ${item.price === 0 ? 'free' : ''}">${item.price === 0 ? 'FREE' : `$${item.price.toLocaleString()} chips`}</div>
+      <div class="item-price ${item.price === 0 ? 'free' : ''}">${item.price === 0 ? 'FREE' : `${item.price.toLocaleString()} chips`}</div>
       ${renderItemBtn(item)}
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 
 function renderItemBtn(item) {
+  if (item.type === 'perk') {
+    if (item.owned) return `<button class="btn btn-outline" disabled>✓ Activated</button>`;
+    return `<button class="btn btn-orange" onclick="buyItem(${item.id})" ${item.price > myBalance ? 'disabled' : ''}>
+      ${item.price > myBalance ? 'Need more chips' : '⚡ Activate'}
+    </button>`;
+  }
   if (item.equipped) return `<button class="btn btn-outline" disabled>✓ Equipped</button>`;
   if (item.owned)    return `<button class="btn btn-green" onclick="equipItem(${item.id})">Equip</button>`;
   return `<button class="btn btn-gold" onclick="buyItem(${item.id})" ${item.price > myBalance ? 'disabled' : ''}>
-    ${item.price > myBalance ? '⛔ Need more chips' : 'Buy Now'}
+    ${item.price > myBalance ? 'Need more chips' : item.price === 0 ? 'Get Free' : 'Buy Now'}
   </button>`;
 }
 
@@ -196,16 +333,19 @@ async function buyItem(id) {
     body: JSON.stringify({ cosmeticId: id }),
   }).then(r => r.json());
 
-  if (data.error) { showToast('❌ ' + data.error, false); if (btn) { btn.disabled = false; btn.textContent = 'Buy Now'; } return; }
+  if (data.error) {
+    showToast('❌ ' + data.error, false);
+    if (btn) { btn.disabled = false; btn.textContent = 'Buy Now'; }
+    return;
+  }
 
   myBalance = data.newBalance;
   document.getElementById('navBalance').textContent = `$${myBalance.toLocaleString()}`;
-  showToast(`✅ Purchased! You now own this item.`);
+  showToast('✅ Purchased! Item is now available.');
 
-  // Update local state
   const item = allItems.find(i => i.id === id);
-  if (item) { item.owned = true; }
-  await loadShop(); // Refresh so equip button appears
+  if (item) { item.owned = true; if (item.type === 'perk') item.equipped = true; }
+  await loadShop();
 }
 
 async function equipItem(id) {
@@ -216,9 +356,8 @@ async function equipItem(id) {
   }).then(r => r.json());
 
   if (data.error) { showToast('❌ ' + data.error, false); return; }
-  showToast(`✅ Equipped! Your table will look amazing.`);
+  showToast('✅ Equipped! Changes take effect in-game.');
 
-  // Update local equipped state
   const equipped = data.equipped;
   allItems.forEach(i => {
     if (i.type === equipped.type) i.equipped = false;
