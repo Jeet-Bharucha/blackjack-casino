@@ -73,6 +73,10 @@
   }
   .field input:focus { border-color: rgba(255,215,100,0.5); box-shadow: 0 0 0 3px rgba(255,215,100,0.08); }
   .field input::placeholder { color: rgba(255,255,255,0.2); }
+  .pw-wrap { position: relative; }
+  .pw-wrap input { width: 100%; padding-right: 44px; }
+  .pw-toggle { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; color: rgba(255,215,100,0.4); font-size: 18px; line-height: 1; padding: 0; transition: color .2s; }
+  .pw-toggle:hover { color: rgba(255,215,100,0.8); }
 
   .btn-submit {
     margin-top: 4px; padding: 14px;
@@ -133,7 +137,10 @@
     </div>
     <div class="field">
       <label>Password</label>
-      <input type="password" id="loginPassword" placeholder="••••••••" required autocomplete="current-password"/>
+      <div class="pw-wrap">
+        <input type="password" id="loginPassword" placeholder="••••••••" required autocomplete="current-password"/>
+        <button type="button" class="pw-toggle" onclick="togglePw('loginPassword', this)" tabindex="-1">👁</button>
+      </div>
     </div>
     <div class="forgot-link" onclick="showForgot()">Forgot password?</div>
     <div class="error-msg" id="loginError"></div>
@@ -156,7 +163,10 @@
     </div>
     <div class="field">
       <label>Password</label>
-      <input type="password" id="regPassword" placeholder="Min. 6 characters" required minlength="6" autocomplete="new-password"/>
+      <div class="pw-wrap">
+        <input type="password" id="regPassword" placeholder="Min. 6 characters" required minlength="6" autocomplete="new-password"/>
+        <button type="button" class="pw-toggle" onclick="togglePw('regPassword', this)" tabindex="-1">👁</button>
+      </div>
     </div>
     <div class="error-msg" id="registerError"></div>
     <button class="btn-submit" type="submit" id="registerBtn">Create Account</button>
@@ -190,7 +200,10 @@
     </div>
     <div class="field">
       <label>New Password</label>
-      <input type="password" id="resetPassword" placeholder="Min. 6 characters" minlength="6" autocomplete="new-password"/>
+      <div class="pw-wrap">
+        <input type="password" id="resetPassword" placeholder="Min. 6 characters" minlength="6" autocomplete="new-password"/>
+        <button type="button" class="pw-toggle" onclick="togglePw('resetPassword', this)" tabindex="-1">👁</button>
+      </div>
     </div>
     <div class="error-msg" id="resetError"></div>
     <div class="success-msg" id="resetSuccess"></div>
@@ -202,6 +215,12 @@
 <script>
   const API = 'https://blackjack-casino-production.up.railway.app/api';
   let forgotEmail = '';
+
+  function togglePw(inputId, btn) {
+    const input = document.getElementById(inputId);
+    if (input.type === 'password') { input.type = 'text'; btn.textContent = '🙈'; }
+    else { input.type = 'password'; btn.textContent = '👁'; }
+  }
 
   if (localStorage.getItem('bj_token')) window.location.href = 'blackjack.html';
 

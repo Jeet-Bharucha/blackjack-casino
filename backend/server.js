@@ -199,7 +199,13 @@ async function connectDB() {
       vip_tier       VARCHAR(20)   NOT NULL DEFAULT 'Bronze',
       win_streak     INT           NOT NULL DEFAULT 0,
       max_win_streak INT           NOT NULL DEFAULT 0,
-      created_at     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP
+      created_at     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      date_of_birth  DATE          NULL,
+      verify_status  VARCHAR(20)   NOT NULL DEFAULT 'unverified',
+      is_admin       TINYINT(1)    NOT NULL DEFAULT 0,
+      id_document    MEDIUMTEXT    NULL,
+      selfie_photo   MEDIUMTEXT    NULL,
+      verified_at    DATETIME      NULL
     )
   `);
 
@@ -266,6 +272,18 @@ async function connectDB() {
       UNIQUE KEY uq_user_cosmetic (user_id, cosmetic_id),
       FOREIGN KEY (user_id)     REFERENCES users(id)     ON DELETE CASCADE,
       FOREIGN KEY (cosmetic_id) REFERENCES cosmetics(id) ON DELETE CASCADE
+    )
+  `);
+
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS stripe_purchases (
+      id           INT AUTO_INCREMENT PRIMARY KEY,
+      user_id      INT NOT NULL,
+      session_id   VARCHAR(255) NOT NULL UNIQUE,
+      chips        INT NOT NULL,
+      pkg          VARCHAR(50),
+      credited_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     )
   `);
 
@@ -696,9 +714,33 @@ app.get('/api/verify-payment', auth, async (req, res) => {
     const session = await stripe.checkout.sessions.retrieve(session_id);
     if (session.payment_status !== 'paid') return res.status(400).json({ error: 'Payment not completed' });
     if (parseInt(session.metadata?.userId) !== req.user.id) return res.status(403).json({ error: 'Forbidden' });
+
+    const chips = parseInt(session.metadata?.chips);
+    const pkg   = session.metadata?.package || 'chips';
+
+    // Check if this session was already credited (idempotency)
+    const [existing] = await db.execute('SELECT id FROM stripe_purchases WHERE session_id=?', [session_id]);
+    if (!existing.length) {
+      // Credit chips + record purchase
+      await db.execute('UPDATE users SET balance = balance + ? WHERE id = ?', [chips, req.user.id]);
+      await db.execute('INSERT INTO stripe_purchases (user_id, session_id, chips, pkg) VALUES (?,?,?,?)',
+        [req.user.id, session_id, chips, pkg]);
+
+      // Send invoice email
+      const [uRows] = await db.execute('SELECT username, email, balance FROM users WHERE id=?', [req.user.id]);
+      if (uRows.length) {
+        const u = uRows[0];
+        await sendEmail({
+          to: u.email,
+          subject: `🎉 Payment Confirmed — ${chips.toLocaleString()} chips added!`,
+          html: receiptEmailHTML({ username: u.username, chips, amount: session.amount_total, newBalance: u.balance, pkg }),
+        });
+      }
+    }
+
     const [rows] = await db.execute('SELECT balance FROM users WHERE id=?', [req.user.id]);
-    res.json({ balance: rows[0].balance, chips: parseInt(session.metadata?.chips), package: session.metadata?.package });
-  } catch (err) { res.status(500).json({ error: 'Could not verify payment' }); }
+    res.json({ balance: rows[0].balance, chips, package: pkg });
+  } catch (err) { console.error('verify-payment error:', err.message); res.status(500).json({ error: 'Could not verify payment' }); }
 });
 
 // ── DAILY BONUS ───────────────────────────────────────
