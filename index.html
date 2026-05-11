@@ -3,361 +3,507 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Blackjack — Sign In</title>
+<title>Blackjack Casino Royale</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=Cinzel:wght@400;600;700&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400&family=Cinzel:wght@400;600;700;900&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap');
 
-  * { margin: 0; padding: 0; box-sizing: border-box; }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  :root{--gold:#ffd764;--gold2:#c9a227;--green:#4cff91;}
 
-  body {
-    min-height: 100vh;
-    background: #0d0500;
-    font-family: 'Cinzel', serif;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    overflow: hidden;
+  html,body{height:100%;overflow-x:hidden;}
+
+  body{
+    background:#050200;
+    font-family:'Cinzel',serif;
+    color:#f0f0f0;
   }
 
-  body::before {
-    content: '';
-    position: fixed; inset: 0;
+  /* ── HERO ── */
+  .hero{
+    position:relative;
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    overflow:hidden;
+    padding:60px 20px 80px;
+  }
+
+  /* felt radial background */
+  .hero::before{
+    content:'';
+    position:absolute;inset:0;
     background:
-      radial-gradient(ellipse 70% 60% at 50% 40%, rgba(0,70,15,0.3) 0%, transparent 70%),
-      radial-gradient(ellipse 100% 100% at 50% 100%, rgba(50,20,0,0.4) 0%, transparent 60%);
-    pointer-events: none;
+      radial-gradient(ellipse 90% 70% at 50% 55%, #0f3d1a 0%, #071a0b 45%, #050200 100%);
+    z-index:0;
   }
 
-  .bg-cards { position: fixed; inset: 0; pointer-events: none; overflow: hidden; }
-  .bg-card {
-    position: absolute; width: 60px; height: 85px;
-    background: rgba(254,253,248,0.04); border: 1px solid rgba(255,255,255,0.06);
-    border-radius: 6px; animation: floatCard linear infinite;
-  }
-  @keyframes floatCard {
-    0%   { transform: translateY(110vh) rotate(var(--rot)); opacity: 0; }
-    10%  { opacity: 1; } 90% { opacity: 1; }
-    100% { transform: translateY(-10vh) rotate(var(--rot)); opacity: 0; }
+  /* top vignette */
+  .hero::after{
+    content:'';
+    position:absolute;top:0;left:0;right:0;height:220px;
+    background:linear-gradient(to bottom,#050200,transparent);
+    z-index:1;pointer-events:none;
   }
 
-  .auth-card {
-    position: relative; z-index: 10;
-    width: min(440px, 94vw);
-    background: rgba(12,6,0,0.92);
-    border: 1px solid rgba(255,215,100,0.2);
-    border-radius: 16px;
-    padding: 44px 40px 36px;
-    box-shadow: 0 0 0 1px rgba(255,215,100,0.06), 0 40px 80px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.05);
-    backdrop-filter: blur(10px);
+  /* ── FELT TEXTURE ── */
+  .felt-texture{
+    position:absolute;inset:0;z-index:0;opacity:.35;
+    background-image:
+      repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.06) 2px,rgba(0,0,0,.06) 4px),
+      repeating-linear-gradient(90deg,transparent,transparent 2px,rgba(0,0,0,.06) 2px,rgba(0,0,0,.06) 4px);
   }
 
-  .logo { text-align: center; margin-bottom: 32px; }
-  .logo-suit { font-size: 40px; display: block; margin-bottom: 8px; filter: drop-shadow(0 0 12px rgba(255,215,100,0.5)); }
-  .logo-title { font-size: 28px; font-weight: 900; letter-spacing: 6px; color: #ffd764; text-shadow: 0 0 20px rgba(255,215,100,0.4); }
-  .logo-sub { font-size: 10px; letter-spacing: 3px; color: rgba(255,215,100,0.4); margin-top: 4px; font-family: 'Crimson Text', serif; font-style: italic; }
-
-  .tabs { display: flex; border-bottom: 1px solid rgba(255,215,100,0.15); margin-bottom: 28px; }
-  .tab { flex: 1; padding: 10px; text-align: center; font-size: 11px; letter-spacing: 3px; color: rgba(255,215,100,0.35); cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.2s; margin-bottom: -1px; }
-  .tab.active { color: #ffd764; border-bottom-color: #ffd764; }
-
-  .form { display: none; flex-direction: column; gap: 16px; }
-  .form.active { display: flex; }
-
-  .field { display: flex; flex-direction: column; gap: 6px; }
-  .field label { font-size: 9px; letter-spacing: 3px; color: rgba(255,215,100,0.5); text-transform: uppercase; }
-  .field input {
-    background: rgba(255,255,255,0.04); border: 1px solid rgba(255,215,100,0.15);
-    border-radius: 6px; padding: 12px 14px; color: #f0f0f0;
-    font-family: 'Crimson Text', serif; font-size: 16px; outline: none;
-    transition: border-color 0.2s, box-shadow 0.2s;
+  /* ── FLOATING CARDS BACKGROUND ── */
+  .bg-cards{position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:1;}
+  .bg-card{
+    position:absolute;
+    background:rgba(254,253,248,.04);
+    border:1px solid rgba(255,255,255,.07);
+    border-radius:8px;
+    display:flex;align-items:center;justify-content:center;
+    font-size:28px;color:rgba(255,255,255,.06);
+    animation:floatUp linear infinite;
   }
-  .field input:focus { border-color: rgba(255,215,100,0.5); box-shadow: 0 0 0 3px rgba(255,215,100,0.08); }
-  .field input::placeholder { color: rgba(255,255,255,0.2); }
-  .pw-wrap { position: relative; }
-  .pw-wrap input { width: 100%; padding-right: 44px; }
-  .pw-toggle { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; color: rgba(255,215,100,0.4); font-size: 18px; line-height: 1; padding: 0; transition: color .2s; }
-  .pw-toggle:hover { color: rgba(255,215,100,0.8); }
-
-  .btn-submit {
-    margin-top: 4px; padding: 14px;
-    background: linear-gradient(135deg, #c9a227, #ffd764, #c9a227);
-    color: #1a0a00; border: none; border-radius: 6px;
-    font-family: 'Cinzel', serif; font-size: 12px; font-weight: 700; letter-spacing: 3px;
-    cursor: pointer; box-shadow: 0 4px 16px rgba(201,162,39,0.35); transition: all 0.2s;
+  @keyframes floatUp{
+    0%{transform:translateY(110vh) rotate(var(--r));opacity:0;}
+    8%{opacity:1;}92%{opacity:1;}
+    100%{transform:translateY(-12vh) rotate(var(--r));opacity:0;}
   }
-  .btn-submit:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(201,162,39,0.5); }
-  .btn-submit:active { transform: translateY(0); }
-  .btn-submit:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 
-  .error-msg { font-size: 12px; color: #ff6b6b; text-align: center; font-family: 'Crimson Text', serif; min-height: 18px; letter-spacing: 0.5px; }
-  .success-msg { font-size: 12px; color: #4cff91; text-align: center; font-family: 'Crimson Text', serif; letter-spacing: 0.5px; }
-
-  .divider { display: flex; align-items: center; gap: 12px; color: rgba(255,215,100,0.2); font-size: 10px; letter-spacing: 2px; }
-  .divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: rgba(255,215,100,0.1); }
-
-  .bonus-note { text-align: center; font-family: 'Crimson Text', serif; font-size: 13px; color: rgba(255,255,255,0.3); font-style: italic; }
-  .bonus-note span { color: #4cff91; font-style: normal; font-weight: 600; }
-
-  .forgot-link { text-align: right; font-size: 11px; color: rgba(255,215,100,0.4); font-family: 'Crimson Text', serif; cursor: pointer; transition: color 0.2s; }
-  .forgot-link:hover { color: #ffd764; }
-
-  .back-link { font-size: 11px; color: rgba(255,215,100,0.4); font-family: 'Crimson Text', serif; cursor: pointer; text-align: center; transition: color 0.2s; }
-  .back-link:hover { color: #ffd764; }
-
-  .reset-code-box {
-    background: rgba(76,255,145,0.06); border: 1px solid rgba(76,255,145,0.3);
-    border-radius: 8px; padding: 14px 16px; text-align: center;
+  /* ── GIANT CARD ART ── */
+  .card-art-wrap{
+    position:absolute;
+    right:-40px;bottom:-30px;
+    width:min(480px,80vw);
+    display:flex;gap:18px;align-items:flex-end;
+    z-index:2;pointer-events:none;
+    opacity:.18;
+    transform:rotate(-4deg);
+    filter:blur(1px);
   }
-  .reset-code-label { font-size: 9px; letter-spacing: 2px; color: rgba(76,255,145,0.6); text-transform: uppercase; margin-bottom: 6px; }
-  .reset-code-value { font-size: 28px; font-weight: 700; color: #4cff91; font-family: 'Playfair Display', serif; letter-spacing: 8px; }
-  .reset-code-note { font-size: 11px; color: rgba(255,255,255,0.3); font-family: 'Crimson Text', serif; margin-top: 4px; font-style: italic; }
+  .deco-card{
+    width:130px;height:190px;
+    background:#fefdf8;
+    border-radius:12px;
+    border:1px solid rgba(255,255,255,.3);
+    display:flex;flex-direction:column;justify-content:space-between;
+    padding:10px;
+    box-shadow:0 20px 60px rgba(0,0,0,.8);
+    font-family:'Playfair Display',serif;
+  }
+  .deco-card.red{color:#c8102e;}.deco-card.black{color:#1a1a1a;}
+  .deco-rank{font-size:22px;font-weight:700;line-height:1;}
+  .deco-suit-sm{font-size:14px;line-height:1;}
+  .deco-suit-center{font-size:60px;text-align:center;flex:1;display:flex;align-items:center;justify-content:center;}
+  .deco-corner-bot{transform:rotate(180deg);display:flex;flex-direction:column;align-items:center;}
+
+  /* ── HERO CONTENT ── */
+  .hero-content{position:relative;z-index:3;text-align:center;max-width:700px;}
+
+  .hero-eyebrow{
+    display:inline-block;
+    font-size:10px;letter-spacing:6px;
+    color:rgba(255,215,100,.5);
+    text-transform:uppercase;
+    border:1px solid rgba(255,215,100,.2);
+    border-radius:20px;padding:5px 18px;
+    margin-bottom:28px;
+    font-family:'Crimson Text',serif;font-style:italic;
+  }
+
+  .hero-title{
+    font-size:clamp(52px,10vw,110px);
+    font-weight:900;
+    letter-spacing:10px;
+    line-height:.9;
+    color:#ffd764;
+    text-shadow:
+      0 0 40px rgba(255,215,100,.5),
+      0 0 100px rgba(255,215,100,.2),
+      0 4px 0 rgba(150,100,0,.8);
+    margin-bottom:10px;
+  }
+
+  .hero-subtitle{
+    font-size:clamp(13px,2.5vw,20px);
+    letter-spacing:8px;
+    color:rgba(255,215,100,.35);
+    margin-bottom:28px;
+  }
+
+  .hero-desc{
+    font-family:'Crimson Text',serif;
+    font-size:clamp(15px,2vw,19px);
+    color:rgba(255,255,255,.55);
+    line-height:1.7;
+    max-width:520px;
+    margin:0 auto 44px;
+  }
+
+  .hero-desc strong{color:rgba(255,255,255,.85);}
+
+  .cta-group{display:flex;gap:14px;justify-content:center;flex-wrap:wrap;margin-bottom:20px;}
+
+  .btn-cta{
+    padding:16px 40px;
+    background:linear-gradient(135deg,#c9a227,#ffd764 50%,#c9a227);
+    color:#1a0a00;border:none;border-radius:6px;
+    font-family:'Cinzel',serif;font-size:13px;font-weight:700;letter-spacing:3px;
+    cursor:pointer;
+    box-shadow:0 0 0 1px rgba(255,215,100,.2),0 8px 32px rgba(201,162,39,.5),0 0 60px rgba(201,162,39,.15);
+    transition:all .25s;
+    text-decoration:none;display:inline-block;
+  }
+  .btn-cta:hover{transform:translateY(-3px) scale(1.03);box-shadow:0 0 0 1px rgba(255,215,100,.3),0 12px 40px rgba(201,162,39,.65),0 0 80px rgba(201,162,39,.2);}
+  .btn-cta:active{transform:translateY(0);}
+
+  .btn-cta-ghost{
+    padding:16px 32px;
+    background:transparent;
+    color:rgba(255,215,100,.7);
+    border:1px solid rgba(255,215,100,.3);
+    border-radius:6px;
+    font-family:'Cinzel',serif;font-size:12px;letter-spacing:3px;
+    cursor:pointer;transition:all .25s;
+    text-decoration:none;display:inline-block;
+  }
+  .btn-cta-ghost:hover{border-color:rgba(255,215,100,.7);color:#ffd764;background:rgba(255,215,100,.05);}
+
+  .hero-note{font-family:'Crimson Text',serif;font-size:12px;color:rgba(255,255,255,.25);letter-spacing:1px;}
+  .hero-note span{color:#4cff91;}
+
+  /* ── DIVIDER ── */
+  .section-divider{
+    display:flex;align-items:center;gap:20px;
+    padding:0 60px;margin:0 auto;max-width:900px;
+  }
+  .divider-line{flex:1;height:1px;background:linear-gradient(to right,transparent,rgba(255,215,100,.15),transparent);}
+  .divider-suit{font-size:20px;color:rgba(255,215,100,.25);}
+
+  /* ── FEATURES STRIP ── */
+  .features{
+    position:relative;z-index:3;
+    padding:70px 20px 80px;
+    background:rgba(0,0,0,.4);
+    border-top:1px solid rgba(255,215,100,.07);
+    border-bottom:1px solid rgba(255,215,100,.07);
+  }
+  .features-inner{max-width:960px;margin:0 auto;}
+  .features-title{text-align:center;font-size:11px;letter-spacing:6px;color:rgba(255,215,100,.35);text-transform:uppercase;margin-bottom:48px;}
+
+  .features-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(200px,1fr));
+    gap:28px;
+  }
+  .feat{
+    text-align:center;padding:28px 20px;
+    background:rgba(255,255,255,.02);
+    border:1px solid rgba(255,215,100,.07);
+    border-radius:12px;
+    transition:border-color .25s,background .25s;
+  }
+  .feat:hover{border-color:rgba(255,215,100,.2);background:rgba(255,215,100,.03);}
+  .feat-icon{font-size:36px;margin-bottom:14px;display:block;}
+  .feat-title{font-size:13px;letter-spacing:2px;color:#ffd764;margin-bottom:8px;}
+  .feat-desc{font-family:'Crimson Text',serif;font-size:14px;color:rgba(255,255,255,.4);line-height:1.6;}
+
+  /* ── TIERS SECTION ── */
+  .tiers-section{padding:72px 20px;max-width:960px;margin:0 auto;}
+  .tiers-title{text-align:center;font-size:clamp(22px,4vw,32px);font-weight:700;color:#ffd764;letter-spacing:4px;margin-bottom:8px;}
+  .tiers-sub{text-align:center;font-family:'Crimson Text',serif;font-size:14px;color:rgba(255,255,255,.35);margin-bottom:44px;letter-spacing:1px;}
+  .tiers-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;}
+
+  .tier-card{
+    padding:24px 16px;border-radius:12px;text-align:center;
+    border:1px solid rgba(255,255,255,.06);
+    background:rgba(255,255,255,.02);
+    position:relative;overflow:hidden;
+    transition:transform .2s;
+  }
+  .tier-card:hover{transform:translateY(-4px);}
+  .tier-card::before{content:'';position:absolute;inset:0;opacity:.06;pointer-events:none;}
+  .tier-card.bronze::before{background:#cd7f32;}
+  .tier-card.silver::before{background:#aaa;}
+  .tier-card.gold::before{background:#ffd764;}
+  .tier-card.platinum::before{background:#e5e4e2;}
+  .tier-card.diamond::before{background:linear-gradient(135deg,#b9f2ff,#8866ff);}
+  .tier-card.diamond{border-color:rgba(136,102,255,.3);}
+
+  .tier-icon{font-size:34px;margin-bottom:10px;display:block;}
+  .tier-name{font-size:12px;letter-spacing:3px;margin-bottom:6px;}
+  .tier-card.bronze .tier-name{color:#cd7f32;}
+  .tier-card.silver .tier-name{color:#bbb;}
+  .tier-card.gold .tier-name{color:#ffd764;}
+  .tier-card.platinum .tier-name{color:#e5e4e2;}
+  .tier-card.diamond .tier-name{color:#b9f2ff;}
+  .tier-req{font-family:'Crimson Text',serif;font-size:13px;color:rgba(255,255,255,.35);}
+
+  /* ── TABLE PREVIEW ── */
+  .preview-section{
+    padding:80px 20px;
+    background:rgba(0,0,0,.35);
+    border-top:1px solid rgba(255,215,100,.07);
+  }
+  .preview-inner{max-width:860px;margin:0 auto;text-align:center;}
+  .preview-title{font-size:clamp(20px,3.5vw,28px);font-weight:700;color:#ffd764;letter-spacing:3px;margin-bottom:8px;}
+  .preview-sub{font-family:'Crimson Text',serif;font-size:15px;color:rgba(255,255,255,.35);margin-bottom:40px;}
+
+  /* Mini table mockup */
+  .table-mockup{
+    background:radial-gradient(ellipse 90% 80% at 50% 55%,#1a5c2a 0%,#0f3d1a 55%,#0a2e13 100%);
+    border-radius:45% / 28%;
+    border:10px solid #3a1f05;
+    box-shadow:0 0 0 3px #5c3208,0 0 0 5px #3a1f05,0 40px 100px rgba(0,0,0,.9),inset 0 2px 40px rgba(0,0,0,.5);
+    padding:36px 60px 28px;
+    position:relative;
+    overflow:hidden;
+    max-width:640px;
+    margin:0 auto 40px;
+  }
+  .table-mockup::before{
+    content:'';position:absolute;inset:0;
+    background-image:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.04) 2px,rgba(0,0,0,.04) 4px),repeating-linear-gradient(90deg,transparent,transparent 2px,rgba(0,0,0,.04) 2px,rgba(0,0,0,.04) 4px);
+    border-radius:inherit;pointer-events:none;
+  }
+  .table-label{font-size:9px;letter-spacing:5px;color:rgba(255,215,100,.3);text-align:center;margin-bottom:18px;}
+  .mock-cards{display:flex;justify-content:center;gap:-6px;}
+  .mock-card{
+    width:54px;height:78px;border-radius:6px;
+    background:#fefdf8;border:1px solid rgba(0,0,0,.1);
+    display:flex;flex-direction:column;justify-content:space-between;
+    padding:4px;box-shadow:2px 4px 12px rgba(0,0,0,.5);
+    margin:0 -5px;font-family:'Playfair Display',serif;
+    font-size:14px;font-weight:700;
+  }
+  .mock-card.red{color:#c8102e;}.mock-card.black{color:#1a1a1a;}
+  .mock-card-back{background:#1a237e;background-image:repeating-linear-gradient(45deg,rgba(255,255,255,.04) 0,rgba(255,255,255,.04) 1px,transparent 1px,transparent 8px);}
+  .mock-center{font-size:22px;text-align:center;flex:1;display:flex;align-items:center;justify-content:center;}
+  .mock-dealer{margin-bottom:20px;}
+  .mock-you{margin-top:16px;}
+  .mock-zone-label{font-size:9px;letter-spacing:4px;color:rgba(255,215,100,.35);text-align:center;margin-bottom:8px;}
+  .mock-chips-row{display:flex;justify-content:center;gap:8px;margin-top:14px;}
+  .mock-chip{width:38px;height:38px;border-radius:50%;border:3px solid rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:700;color:#fff;box-shadow:0 3px 8px rgba(0,0,0,.5);}
+  .mc1{background:radial-gradient(circle at 35% 35%,#f5f5f5,#bbb);color:#222;}
+  .mc2{background:radial-gradient(circle at 35% 35%,#ff6b6b,#c0392b);}
+  .mc3{background:radial-gradient(circle at 35% 35%,#5dade2,#1a5276);}
+  .mc4{background:radial-gradient(circle at 35% 35%,#58d68d,#1e8449);}
+  .mc5{background:radial-gradient(circle at 35% 35%,#af7ac5,#6c3483);}
+
+  /* ── FOOTER CTA ── */
+  .footer-cta{
+    padding:80px 20px 100px;
+    text-align:center;
+    position:relative;
+  }
+  .footer-cta::before{
+    content:'';position:absolute;inset:0;
+    background:radial-gradient(ellipse 60% 70% at 50% 50%,rgba(0,60,15,.2) 0%,transparent 70%);
+    pointer-events:none;
+  }
+  .fcta-title{font-size:clamp(24px,5vw,48px);font-weight:900;color:#ffd764;letter-spacing:5px;text-shadow:0 0 40px rgba(255,215,100,.3);margin-bottom:12px;}
+  .fcta-sub{font-family:'Crimson Text',serif;font-size:17px;color:rgba(255,255,255,.4);margin-bottom:36px;}
+  .fcta-bonus{display:inline-block;background:rgba(76,255,145,.08);border:1px solid rgba(76,255,145,.25);border-radius:8px;padding:12px 28px;font-size:16px;color:#4cff91;letter-spacing:2px;margin-bottom:36px;}
+  .fcta-bonus strong{font-size:22px;}
+
+  .footer{border-top:1px solid rgba(255,215,100,.07);padding:20px;text-align:center;font-family:'Crimson Text',serif;font-size:12px;color:rgba(255,255,255,.2);letter-spacing:1px;}
 </style>
 </head>
 <body>
 
-<div class="bg-cards" id="bgCards"></div>
+<!-- ── HERO ── -->
+<section class="hero">
+  <div class="felt-texture"></div>
+  <div class="bg-cards" id="bgCards"></div>
 
-<div class="auth-card">
-  <div class="logo">
-    <span class="logo-suit">♠</span>
-    <div class="logo-title">BLACKJACK</div>
-    <div class="logo-sub">Casino Royale</div>
+  <!-- Decorative giant cards (background art) -->
+  <div class="card-art-wrap">
+    <div class="deco-card black" style="transform:rotate(-8deg) translateY(20px)">
+      <div><div class="deco-rank">A</div><div class="deco-suit-sm">♠</div></div>
+      <div class="deco-suit-center">♠</div>
+      <div class="deco-corner-bot"><div class="deco-rank">A</div><div class="deco-suit-sm">♠</div></div>
+    </div>
+    <div class="deco-card red" style="transform:rotate(-2deg)">
+      <div><div class="deco-rank">K</div><div class="deco-suit-sm">♥</div></div>
+      <div class="deco-suit-center">♥</div>
+      <div class="deco-corner-bot"><div class="deco-rank">K</div><div class="deco-suit-sm">♥</div></div>
+    </div>
+    <div class="deco-card red" style="transform:rotate(5deg) translateY(10px)">
+      <div><div class="deco-rank">Q</div><div class="deco-suit-sm">♦</div></div>
+      <div class="deco-suit-center">♦</div>
+      <div class="deco-corner-bot"><div class="deco-rank">Q</div><div class="deco-suit-sm">♦</div></div>
+    </div>
   </div>
 
-  <div class="tabs" id="mainTabs">
-    <div class="tab active" onclick="switchTab('login')">Sign In</div>
-    <div class="tab" onclick="switchTab('register')">Register</div>
+  <div class="hero-content">
+    <div class="hero-eyebrow">♠ &nbsp; Casino Royale &nbsp; ♠</div>
+
+    <h1 class="hero-title">BLACK<br>JACK</h1>
+    <div class="hero-subtitle">CASINO &nbsp; ROYALE</div>
+
+    <p class="hero-desc">
+      Experience the <strong>thrill of real casino blackjack</strong> — with split hands,
+      insurance, doubling down, live multiplayer tables, dealer voice, and a
+      progressive <strong>5-tier rewards system</strong>. No download. No deposit.
+    </p>
+
+    <div class="cta-group">
+      <a class="btn-cta" href="login.html">🃏 &nbsp; Play Now — It's Free</a>
+      <a class="btn-cta-ghost" href="leaderboard.html">🏆 &nbsp; Leaderboard</a>
+    </div>
+    <div class="hero-note">Start with <span>$500 free chips</span> — no credit card needed</div>
   </div>
+</section>
 
-  <!-- Login -->
-  <form class="form active" id="loginForm" onsubmit="handleLogin(event)">
-    <div class="field">
-      <label>Email</label>
-      <input type="email" id="loginEmail" placeholder="you@example.com" required autocomplete="email"/>
-    </div>
-    <div class="field">
-      <label>Password</label>
-      <div class="pw-wrap">
-        <input type="password" id="loginPassword" placeholder="••••••••" required autocomplete="current-password"/>
-        <button type="button" class="pw-toggle" onclick="togglePw('loginPassword', this)" tabindex="-1">👁</button>
+<!-- ── FEATURES ── -->
+<section class="features">
+  <div class="features-inner">
+    <div class="features-title">Everything a real casino has</div>
+    <div class="features-grid">
+      <div class="feat">
+        <span class="feat-icon">🃏</span>
+        <div class="feat-title">6-Deck Shoe</div>
+        <div class="feat-desc">Authentic 312-card shoe with real shuffle timing and a visible card counter.</div>
+      </div>
+      <div class="feat">
+        <span class="feat-icon">⚡</span>
+        <div class="feat-title">Split & Double</div>
+        <div class="feat-desc">Full casino rules — split pairs, double down, and take insurance on Aces.</div>
+      </div>
+      <div class="feat">
+        <span class="feat-icon">🎰</span>
+        <div class="feat-title">Live Multiplayer</div>
+        <div class="feat-desc">Join real-time tables with up to 5 players. Chat, compete, and bet together.</div>
+      </div>
+      <div class="feat">
+        <span class="feat-icon">🔊</span>
+        <div class="feat-title">Dealer Voice</div>
+        <div class="feat-desc">A smooth dealer voice calls every card. Toggle casino ambience sounds too.</div>
+      </div>
+      <div class="feat">
+        <span class="feat-icon">🎁</span>
+        <div class="feat-title">Daily Bonus</div>
+        <div class="feat-desc">Log in every day for a growing streak bonus — up to $500 chips per visit.</div>
+      </div>
+      <div class="feat">
+        <span class="feat-icon">🏆</span>
+        <div class="feat-title">Achievements</div>
+        <div class="feat-desc">Unlock 12 achievements from your first hand to hitting Unstoppable streak.</div>
       </div>
     </div>
-    <div class="forgot-link" onclick="showForgot()">Forgot password?</div>
-    <div class="error-msg" id="loginError"></div>
-    <button class="btn-submit" type="submit" id="loginBtn">Enter the Table</button>
-  </form>
-
-  <!-- Register -->
-  <form class="form" id="registerForm" onsubmit="handleRegister(event)">
-    <div class="field">
-      <label>Username</label>
-      <input type="text" id="regUsername" placeholder="HighRoller99" required minlength="3" maxlength="20" autocomplete="username"/>
-    </div>
-    <div class="field">
-      <label>Email</label>
-      <input type="email" id="regEmail" placeholder="you@example.com" required autocomplete="email"/>
-    </div>
-    <div class="field">
-      <label>Date of Birth</label>
-      <input type="date" id="regDob" required max="" autocomplete="bday"/>
-    </div>
-    <div class="field">
-      <label>Password</label>
-      <div class="pw-wrap">
-        <input type="password" id="regPassword" placeholder="Min. 6 characters" required minlength="6" autocomplete="new-password"/>
-        <button type="button" class="pw-toggle" onclick="togglePw('regPassword', this)" tabindex="-1">👁</button>
-      </div>
-    </div>
-    <div class="error-msg" id="registerError"></div>
-    <button class="btn-submit" type="submit" id="registerBtn">Create Account</button>
-    <div class="divider">welcome bonus</div>
-    <div class="bonus-note">Start with <span>$500</span> in chips — free · Must be 21+</div>
-  </form>
-
-  <!-- Forgot Password — Step 1: enter email -->
-  <form class="form" id="forgotForm" onsubmit="handleForgot(event)">
-    <div style="text-align:center;margin-bottom:4px;color:#ffd764;letter-spacing:2px;font-size:13px;">Reset Password</div>
-    <div class="field">
-      <label>Your Email</label>
-      <input type="email" id="forgotEmail" placeholder="you@example.com" required autocomplete="email"/>
-    </div>
-    <div class="error-msg" id="forgotError"></div>
-    <button class="btn-submit" type="submit" id="forgotBtn">Send Reset Code</button>
-    <div class="back-link" onclick="backToLogin()">← Back to Sign In</div>
-  </form>
-
-  <!-- Forgot Password — Step 2: code shown + new password -->
-  <div class="form" id="resetForm">
-    <div style="text-align:center;margin-bottom:4px;color:#ffd764;letter-spacing:2px;font-size:13px;">New Password</div>
-    <div class="reset-code-box">
-      <div class="reset-code-label">Your Reset Code</div>
-      <div class="reset-code-value" id="shownCode">——</div>
-      <div class="reset-code-note">Copy this code — it expires in 15 minutes</div>
-    </div>
-    <div class="field">
-      <label>Enter Code</label>
-      <input type="text" id="resetCode" placeholder="6-digit code" maxlength="6" autocomplete="off"/>
-    </div>
-    <div class="field">
-      <label>New Password</label>
-      <div class="pw-wrap">
-        <input type="password" id="resetPassword" placeholder="Min. 6 characters" minlength="6" autocomplete="new-password"/>
-        <button type="button" class="pw-toggle" onclick="togglePw('resetPassword', this)" tabindex="-1">👁</button>
-      </div>
-    </div>
-    <div class="error-msg" id="resetError"></div>
-    <div class="success-msg" id="resetSuccess"></div>
-    <button class="btn-submit" id="resetBtn" onclick="handleReset()">Update Password</button>
-    <div class="back-link" onclick="backToLogin()">← Back to Sign In</div>
   </div>
-</div>
+</section>
+
+<!-- ── TIERS ── -->
+<section style="padding:80px 20px;background:#050200;">
+  <div class="tiers-section" style="padding:0;">
+    <div class="tiers-title">5 Prestige Tiers</div>
+    <div class="tiers-sub">Win chips to climb the ranks — every $75,000 won unlocks the next tier</div>
+    <div class="tiers-grid">
+      <div class="tier-card bronze">
+        <span class="tier-icon">🥉</span>
+        <div class="tier-name">BRONZE</div>
+        <div class="tier-req">Starting tier</div>
+      </div>
+      <div class="tier-card silver">
+        <span class="tier-icon">🥈</span>
+        <div class="tier-name">SILVER</div>
+        <div class="tier-req">75,000 pts</div>
+      </div>
+      <div class="tier-card gold">
+        <span class="tier-icon">🥇</span>
+        <div class="tier-name">GOLD</div>
+        <div class="tier-req">150,000 pts</div>
+      </div>
+      <div class="tier-card platinum">
+        <span class="tier-icon">💠</span>
+        <div class="tier-name">PLATINUM</div>
+        <div class="tier-req">225,000 pts</div>
+      </div>
+      <div class="tier-card diamond">
+        <span class="tier-icon">💎</span>
+        <div class="tier-name">DIAMOND</div>
+        <div class="tier-req">300,000 pts</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── TABLE PREVIEW ── -->
+<section class="preview-section">
+  <div class="preview-inner">
+    <div class="preview-title">Your Table Awaits</div>
+    <div class="preview-sub">Stunning casino felt, realistic card animations, and real-time action</div>
+
+    <div class="table-mockup">
+      <div class="table-label">Blackjack Pays 3 to 2 · Dealer Stands on 17</div>
+
+      <div class="mock-dealer">
+        <div class="mock-zone-label">Dealer</div>
+        <div class="mock-cards">
+          <div class="mock-card black"><div>A</div><div class="mock-center">♠</div><div>A</div></div>
+          <div class="mock-card mock-card-back"></div>
+        </div>
+      </div>
+
+      <div class="mock-you">
+        <div class="mock-cards">
+          <div class="mock-card red"><div>K</div><div class="mock-center">♥</div><div>K</div></div>
+          <div class="mock-card black"><div>A</div><div class="mock-center">♠</div><div>A</div></div>
+        </div>
+        <div class="mock-zone-label" style="margin-top:8px;">You · 21 — Blackjack!</div>
+      </div>
+
+      <div class="mock-chips-row">
+        <div class="mock-chip mc1">$1</div>
+        <div class="mock-chip mc2">$5</div>
+        <div class="mock-chip mc3">$10</div>
+        <div class="mock-chip mc4">$25</div>
+        <div class="mock-chip mc5">$100</div>
+      </div>
+    </div>
+
+    <a class="btn-cta" href="login.html">Enter the Casino →</a>
+  </div>
+</section>
+
+<!-- ── FOOTER CTA ── -->
+<section class="footer-cta">
+  <div class="fcta-title">Ready to Play?</div>
+  <div class="fcta-sub">Create your free account in under 30 seconds</div>
+  <div>
+    <div class="fcta-bonus">🎁 &nbsp; Welcome Bonus: <strong>$500 Free Chips</strong></div>
+  </div>
+  <div class="cta-group">
+    <a class="btn-cta" href="login.html">Create Free Account</a>
+    <a class="btn-cta-ghost" href="login.html">Sign In</a>
+  </div>
+</section>
+
+<footer class="footer">♠ &nbsp; Blackjack Casino Royale &nbsp; · &nbsp; For entertainment only &nbsp; · &nbsp; No real money &nbsp; ♠</footer>
 
 <script>
-  const API = 'https://blackjack-casino-production.up.railway.app/api';
-  let forgotEmail = '';
-
-  function togglePw(inputId, btn) {
-    const input = document.getElementById(inputId);
-    if (input.type === 'password') { input.type = 'text'; btn.textContent = '🙈'; }
-    else { input.type = 'password'; btn.textContent = '👁'; }
-  }
-
+  // Redirect if already logged in
   if (localStorage.getItem('bj_token')) window.location.href = 'blackjack.html';
 
   // Floating background cards
   const suits = ['♠','♥','♦','♣'];
   const bgCards = document.getElementById('bgCards');
-  for (let i = 0; i < 12; i++) {
+  for (let i = 0; i < 16; i++) {
     const c = document.createElement('div');
     c.className = 'bg-card';
-    c.style.left = Math.random() * 100 + 'vw';
-    c.style.setProperty('--rot', (Math.random() * 60 - 30) + 'deg');
-    c.style.animationDuration = (12 + Math.random() * 16) + 's';
-    c.style.animationDelay = (-Math.random() * 20) + 's';
-    c.style.fontSize = '24px';
-    c.style.display = 'flex';
-    c.style.alignItems = 'center';
-    c.style.justifyContent = 'center';
-    c.style.color = 'rgba(255,255,255,0.08)';
-    c.textContent = suits[Math.floor(Math.random() * 4)];
+    const size = 50 + Math.random() * 60;
+    c.style.cssText = `
+      width:${size}px;height:${size*1.4}px;
+      left:${Math.random()*100}vw;
+      --r:${Math.random()*60-30}deg;
+      animation-duration:${14+Math.random()*18}s;
+      animation-delay:${-Math.random()*24}s;
+    `;
+    c.textContent = suits[Math.floor(Math.random()*4)];
     bgCards.appendChild(c);
-  }
-
-  function hideAll() {
-    ['loginForm','registerForm','forgotForm','resetForm'].forEach(id => document.getElementById(id).classList.remove('active'));
-  }
-
-  function switchTab(tab) {
-    document.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', (i === 0 && tab === 'login') || (i === 1 && tab === 'register')));
-    hideAll();
-    document.getElementById(tab === 'login' ? 'loginForm' : 'registerForm').classList.add('active');
-    document.getElementById('mainTabs').style.display = 'flex';
-    document.getElementById('loginError').textContent = '';
-    document.getElementById('registerError').textContent = '';
-  }
-
-  function showForgot() {
-    hideAll();
-    document.getElementById('mainTabs').style.display = 'none';
-    document.getElementById('forgotForm').classList.add('active');
-  }
-
-  function backToLogin() {
-    document.getElementById('mainTabs').style.display = 'flex';
-    hideAll();
-    document.getElementById('loginForm').classList.add('active');
-    document.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', i === 0));
-  }
-
-  async function handleLogin(e) {
-    e.preventDefault();
-    const btn = document.getElementById('loginBtn');
-    const errEl = document.getElementById('loginError');
-    errEl.textContent = ''; btn.disabled = true; btn.textContent = 'Signing in...';
-    try {
-      const res = await fetch(`${API}/login`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: document.getElementById('loginEmail').value, password: document.getElementById('loginPassword').value })
-      });
-      const data = await res.json();
-      if (!res.ok) { errEl.textContent = data.error; return; }
-      localStorage.setItem('bj_token', data.token);
-      localStorage.setItem('bj_user', JSON.stringify(data.user));
-      window.location.href = 'blackjack.html';
-    } catch { errEl.textContent = 'Cannot connect to server. Is it running?'; }
-    finally { btn.disabled = false; btn.textContent = 'Enter the Table'; }
-  }
-
-  // Set max date for DOB (must be 21+ years ago)
-  const maxDob = new Date(); maxDob.setFullYear(maxDob.getFullYear() - 21);
-  document.getElementById('regDob').max = maxDob.toISOString().split('T')[0];
-
-  async function handleRegister(e) {
-    e.preventDefault();
-    const btn = document.getElementById('registerBtn');
-    const errEl = document.getElementById('registerError');
-    errEl.textContent = ''; btn.disabled = true; btn.textContent = 'Creating account...';
-    try {
-      const res = await fetch(`${API}/register`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          username: document.getElementById('regUsername').value,
-          email: document.getElementById('regEmail').value,
-          dateOfBirth: document.getElementById('regDob').value,
-          password: document.getElementById('regPassword').value,
-        })
-      });
-      const data = await res.json();
-      if (!res.ok) { errEl.textContent = data.error; return; }
-      localStorage.setItem('bj_token', data.token);
-      localStorage.setItem('bj_user', JSON.stringify(data.user));
-      // Redirect to age verification first
-      window.location.href = data.requiresVerification ? 'verify-age.html' : 'blackjack.html';
-    } catch { errEl.textContent = 'Cannot connect to server. Is it running?'; }
-    finally { btn.disabled = false; btn.textContent = 'Create Account'; }
-  }
-
-  async function handleForgot(e) {
-    e.preventDefault();
-    const btn = document.getElementById('forgotBtn');
-    const errEl = document.getElementById('forgotError');
-    errEl.textContent = ''; btn.disabled = true; btn.textContent = 'Sending...';
-    forgotEmail = document.getElementById('forgotEmail').value;
-    try {
-      const res = await fetch(`${API}/forgot-password`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: forgotEmail })
-      });
-      const data = await res.json();
-      if (!res.ok) { errEl.textContent = data.error; return; }
-      // Show the code (since no email service is configured)
-      document.getElementById('shownCode').textContent = data.resetCode;
-      hideAll();
-      document.getElementById('resetForm').classList.add('active');
-    } catch { errEl.textContent = 'Cannot connect to server. Is it running?'; }
-    finally { btn.disabled = false; btn.textContent = 'Send Reset Code'; }
-  }
-
-  async function handleReset() {
-    const btn = document.getElementById('resetBtn');
-    const errEl = document.getElementById('resetError');
-    const sucEl = document.getElementById('resetSuccess');
-    errEl.textContent = ''; sucEl.textContent = '';
-    const code = document.getElementById('resetCode').value.trim();
-    const newPassword = document.getElementById('resetPassword').value;
-    if (!code || !newPassword) { errEl.textContent = 'Please fill in all fields.'; return; }
-    btn.disabled = true; btn.textContent = 'Updating...';
-    try {
-      const res = await fetch(`${API}/reset-password`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: forgotEmail, code, newPassword })
-      });
-      const data = await res.json();
-      if (!res.ok) { errEl.textContent = data.error; return; }
-      sucEl.textContent = '✓ Password updated! Redirecting to sign in...';
-      setTimeout(backToLogin, 2000);
-    } catch { errEl.textContent = 'Cannot connect to server.'; }
-    finally { btn.disabled = false; btn.textContent = 'Update Password'; }
   }
 </script>
 </body>

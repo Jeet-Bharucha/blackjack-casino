@@ -181,13 +181,13 @@
 <script>
 const API = 'https://blackjack-casino-production.up.railway.app/api';
 const token = localStorage.getItem('bj_token');
-if (!token) window.location.href = 'index.html';
+if (!token) window.location.href = 'login.html';
 
 let idBase64 = null;
 let selfieBase64 = null;
 let stream = null;
 
-function logout() { localStorage.removeItem('bj_token'); localStorage.removeItem('bj_user'); window.location.href = 'index.html'; }
+function logout() { localStorage.removeItem('bj_token'); localStorage.removeItem('bj_user'); window.location.href = 'login.html'; }
 
 // Check if already verified
 async function checkStatus() {

@@ -148,7 +148,7 @@ const API = 'https://blackjack-casino-production.up.railway.app/api';
 let token = localStorage.getItem('bj_token');
 let myUsername = null;
 
-if (!token) { window.location.href = 'index.html'; }
+if (!token) { window.location.href = 'login.html'; }
 
 async function api(method, path, body) {
   const opts = { method, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` } };

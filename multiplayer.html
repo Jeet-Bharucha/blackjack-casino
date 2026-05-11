@@ -244,11 +244,11 @@
 <script src="https://blackjack-casino-production.up.railway.app/socket.io/socket.io.js"></script>
 <script>
 const token = localStorage.getItem('bj_token');
-if (!token) window.location.href = 'index.html';
+if (!token) window.location.href = 'login.html';
 const me = JSON.parse(localStorage.getItem('bj_user') || '{}');
 document.getElementById('navUser').textContent = me.username || '—';
 
-function logout(){ localStorage.removeItem('bj_token'); localStorage.removeItem('bj_user'); window.location.href='index.html'; }
+function logout(){ localStorage.removeItem('bj_token'); localStorage.removeItem('bj_user'); window.location.href='login.html'; }
 function showToast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2500); }
 
 const RED_SUITS = new Set(['♥','♦']);

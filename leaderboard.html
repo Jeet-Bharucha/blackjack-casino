@@ -91,10 +91,10 @@
 <script>
 const API = 'https://blackjack-casino-production.up.railway.app/api';
 const token = localStorage.getItem('bj_token');
-if (!token) window.location.href = 'index.html';
+if (!token) window.location.href = 'login.html';
 const userData = JSON.parse(localStorage.getItem('bj_user') || '{}');
 
-function logout(){ localStorage.removeItem('bj_token'); localStorage.removeItem('bj_user'); window.location.href='index.html'; }
+function logout(){ localStorage.removeItem('bj_token'); localStorage.removeItem('bj_user'); window.location.href='login.html'; }
 
 if (userData.username) {
   document.getElementById('myCard').style.display='flex';
