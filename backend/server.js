@@ -14,9 +14,11 @@ let mailer = null;
 if (process.env.EMAIL_USER && !process.env.EMAIL_USER.includes('REPLACE_ME')) {
   mailer = nodemailer.createTransport({
     host: 'smtp.gmail.com',
-    port: 465,
-    secure: true,
-    family: 4, // force IPv4 (fixes Railway IPv6 issues)
+    port: 587,
+    secure: false,
+    family: 4,
+    dnsLookupIpVersion: 4, // force IPv4 DNS — fixes Railway IPv6 ENETUNREACH
+    tls: { rejectUnauthorized: false },
     auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
   });
   mailer.verify(err => {
