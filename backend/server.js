@@ -992,6 +992,14 @@ async function settleSolo(conn, userId, player, game) {
   await conn.execute(`INSERT INTO solo_results (round_id,user_id,result,bet,payout,net)
      VALUES (?,?,?,?,?,?)`,
     [game.id,userId,outcome.result,outcome.stake,outcome.payout,outcome.net]);
+  // Tournament rankings are updated only from trusted server-settled hands.
+  await conn.execute(`UPDATE tournament_entries e
+    JOIN tournaments t ON t.id=e.tournament_id
+    SET e.current_chips=GREATEST(0,e.current_chips+?),
+        e.hands_played=e.hands_played+1
+    WHERE e.user_id=? AND t.status='active'
+      AND UTC_TIMESTAMP() BETWEEN t.starts_at AND t.ends_at`,
+    [outcome.net,userId]);
   return updatedBalance;
 }
 function soloError(res,err) {
@@ -1384,40 +1392,34 @@ app.get('/api/tournaments/:id', auth, async (req, res) => {
   } catch (e) { console.error(e); res.status(500).json({ error: 'Server error' }); }
 });
 
-app.post('/api/tournaments/:id/join', auth, async (req, res) => {
+app.post('/api/tournaments/:id/join', auth, throttle(15,60*60*1000), async (req, res) => {
+  const conn=await db.getConnection();
   try {
-    const [rows] = await db.execute('SELECT * FROM tournaments WHERE id=?', [req.params.id]);
-    if (!rows.length) return res.status(404).json({ error: 'Tournament not found' });
-    const t = rows[0];
-    if (t.status === 'ended') return res.status(400).json({ error: 'Tournament has ended' });
-    const [existing] = await db.execute('SELECT id FROM tournament_entries WHERE tournament_id=? AND user_id=?', [t.id, req.user.id]);
-    if (existing.length) return res.status(400).json({ error: 'Already joined this tournament' });
-    const [[{count}]] = await db.execute('SELECT COUNT(*) as count FROM tournament_entries WHERE tournament_id=?', [t.id]);
-    if (count >= t.max_players) return res.status(400).json({ error: 'Tournament is full' });
-    const [userRows] = await db.execute('SELECT balance FROM users WHERE id=?', [req.user.id]);
-    if (userRows[0].balance < t.buy_in) return res.status(400).json({ error: `Insufficient balance — buy-in is $${t.buy_in}` });
-    await db.execute('UPDATE users SET balance=balance-? WHERE id=?', [t.buy_in, req.user.id]);
-    await db.execute('UPDATE tournaments SET prize_pool=prize_pool+? WHERE id=?', [t.buy_in, t.id]);
-    await db.execute('INSERT INTO tournament_entries (tournament_id, user_id, starting_chips, current_chips) VALUES (?,?,1000,1000)', [t.id, req.user.id]);
-    const [upd] = await db.execute('SELECT balance FROM users WHERE id=?', [req.user.id]);
-    res.json({ success: true, startingChips: 1000, newBalance: upd[0].balance });
-  } catch (e) { console.error(e); res.status(500).json({ error: 'Server error' }); }
+    const tournamentId=Number(req.params.id);
+    if(!Number.isSafeInteger(tournamentId)||tournamentId<=0)throw clientError('Invalid tournament ID');
+    await conn.beginTransaction();
+    const [[user]]=await conn.execute('SELECT balance FROM users WHERE id=? FOR UPDATE',[req.user.id]);
+    if(!user)throw clientError('Account not found',404);
+    const [rows]=await conn.execute('SELECT * FROM tournaments WHERE id=? FOR UPDATE',[tournamentId]);
+    if(!rows.length)throw clientError('Tournament not found',404);
+    const t=rows[0];
+    if(t.status==='ended')throw clientError('Tournament has ended');
+    const [existing]=await conn.execute('SELECT id FROM tournament_entries WHERE tournament_id=? AND user_id=?',[t.id,req.user.id]);
+    if(existing.length)throw clientError('Already joined this tournament');
+    const [[{count}]]=await conn.execute('SELECT COUNT(*) AS count FROM tournament_entries WHERE tournament_id=?',[t.id]);
+    if(count>=t.max_players)throw clientError('Tournament is full');
+    if(user.balance<t.buy_in)throw clientError('Insufficient balance');
+    await conn.execute('INSERT INTO tournament_entries (tournament_id,user_id,starting_chips,current_chips) VALUES (?,?,1000,1000)',[t.id,req.user.id]);
+    await conn.execute('UPDATE users SET balance=balance-? WHERE id=?',[t.buy_in,req.user.id]);
+    await conn.execute('UPDATE tournaments SET prize_pool=prize_pool+? WHERE id=?',[t.buy_in,t.id]);
+    await conn.commit();
+    return res.json({success:true,startingChips:1000,newBalance:user.balance-t.buy_in});
+  }catch(e){await conn.rollback();return soloError(res,e);}
+  finally{conn.release();}
 });
-
-app.post('/api/tournaments/:id/game-result', auth, async (req, res) => {
-  try {
-    const { bet, payout } = req.body;
-    const [entryRows] = await db.execute('SELECT * FROM tournament_entries WHERE tournament_id=? AND user_id=?', [req.params.id, req.user.id]);
-    if (!entryRows.length) return res.status(404).json({ error: 'Not entered in this tournament' });
-    const [tRows] = await db.execute('SELECT status FROM tournaments WHERE id=?', [req.params.id]);
-    if (!tRows.length || tRows[0].status !== 'active') return res.status(400).json({ error: 'Tournament is not active' });
-    const entry = entryRows[0];
-    const newChips = Math.max(0, entry.current_chips - bet + payout);
-    await db.execute('UPDATE tournament_entries SET current_chips=?, hands_played=hands_played+1 WHERE tournament_id=? AND user_id=?', [newChips, req.params.id, req.user.id]);
-    const [[{rank}]] = await db.execute('SELECT COUNT(*)+1 as rank FROM tournament_entries WHERE tournament_id=? AND current_chips>?', [req.params.id, newChips]);
-    res.json({ currentChips: newChips, rank });
-  } catch (e) { console.error(e); res.status(500).json({ error: 'Server error' }); }
-});
+// Legacy client-supplied tournament results can no longer forge points.
+app.post('/api/tournaments/:id/game-result',auth,(req,res)=>
+  res.status(410).json({error:'Tournament points now come from verified solo rounds.'}));
 
 app.post('/api/admin/tournaments', adminAuth, async (req, res) => {
   try {
