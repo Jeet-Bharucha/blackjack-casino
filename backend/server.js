@@ -1482,7 +1482,8 @@ app.post('/api/use-referral', auth, async (req, res) => {
     if (!refRows.length) return res.status(400).json({ error: 'Invalid referral code' });
     if (refRows[0].id === req.user.id) return res.status(400).json({ error: 'Cannot use your own referral code' });
     const BONUS = 100;
-    await db.execute('UPDATE users SET balance=balance+?, referred_by=? WHERE id=?', [BONUS, refRows[0].id, req.user.id]);
+    const [claimed] = await db.execute('UPDATE users SET balance=balance+?, referred_by=? WHERE id=? AND referred_by IS NULL', [BONUS, refRows[0].id, req.user.id]);
+    if(claimed.affectedRows!==1) return res.status(400).json({ error: 'Referral already used' });
     await db.execute('UPDATE users SET balance=balance+? WHERE id=?', [BONUS, refRows[0].id]);
     const [upd] = await db.execute('SELECT balance FROM users WHERE id=?', [req.user.id]);
     res.json({ success: true, bonus: BONUS, newBalance: upd[0].balance, referrer: refRows[0].username });
