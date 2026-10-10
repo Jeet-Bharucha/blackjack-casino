@@ -99,7 +99,7 @@
     if(!res.ok)throw Error('Unable to restore your game');
     const st=await res.json();
     if(st.active)updateTable(st);
-    else { lastState=st; balance=st.balance;gamePhase='bet';updateUI();refreshControls(); }
+    else { lastState=st; balance=st.balance;gamePhase='bet';currentBet=0;updateUI();refreshControls(); }
   }
   window.startDeal=async function(){
     if(pending||gamePhase!=='bet'||!Number.isInteger(currentBet)||currentBet<1)return;
