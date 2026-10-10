@@ -209,6 +209,7 @@ async function connectDB() {
       created_at     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
       date_of_birth  DATE          NULL,
       verify_status  VARCHAR(20)   NOT NULL DEFAULT 'not_required',
+      token_version  INT NOT NULL DEFAULT 0,
       is_admin       TINYINT(1)    NOT NULL DEFAULT 0,
       id_document         MEDIUMTEXT    NULL,
       selfie_photo        MEDIUMTEXT    NULL,
@@ -421,6 +422,7 @@ async function connectDB() {
     "ALTER TABLE users ADD COLUMN equipped_badge      VARCHAR(50) NULL                  AFTER last_bonus_slot_date",
     "ALTER TABLE users ADD COLUMN equipped_name_color VARCHAR(30) NULL                  AFTER equipped_badge",
     "ALTER TABLE users ADD COLUMN equipped_border     VARCHAR(30) NULL                  AFTER equipped_name_color",
+    "ALTER TABLE users ADD COLUMN token_version INT NOT NULL DEFAULT 0",
   ];
   for (const sql of alterColumns) {
     try { await db.execute(sql); } catch (e) { /* column already exists — ignore */ }
@@ -498,11 +500,16 @@ const VIP_PERKS = {
 };
 
 // ── AUTH MIDDLEWARE ───────────────────────────────────
-function auth(req, res, next) {
-  const token = req.headers.authorization?.split(' ')[1];
-  if (!token) return res.status(401).json({ error: 'No token' });
-  try { req.user = jwt.verify(token, JWT_SECRET); next(); }
-  catch { res.status(401).json({ error: 'Invalid token' }); }
+async function auth(req, res, next) {
+  const token=req.headers.authorization?.split(' ')[1];
+  if(!token)return res.status(401).json({error:'No token'});
+  try {
+    const user=jwt.verify(token,JWT_SECRET);
+    const [rows]=await db.execute('SELECT is_banned,token_version FROM users WHERE id=?',[user.id]);
+    if(!rows.length||rows[0].is_banned||(rows[0].token_version||0)!==(user.v||0))
+      return res.status(401).json({error:'Session is no longer valid'});
+    req.user=user;next();
+  }catch(e){res.status(401).json({error:'Session is no longer valid'});}
 }
 function verifyToken(token) {
   try { return jwt.verify(token, JWT_SECRET); } catch { return null; }
@@ -600,7 +607,7 @@ app.post('/api/register', throttle(8, 60 * 60 * 1000), async (req, res) => {
       'INSERT INTO users (username, email, password, balance, date_of_birth, verify_status) VALUES (?,?,?,500,?,?)',
       [username, email.toLowerCase(), hash, dateOfBirth, 'not_required']
     );
-    const token = jwt.sign({ id: result.insertId, username }, JWT_SECRET, { expiresIn: '7d' });
+    const token = jwt.sign({ id: result.insertId, username, v: 0 }, JWT_SECRET, { expiresIn: '7d' });
 
     // Send welcome email
     await sendEmail({
@@ -638,7 +645,7 @@ app.post('/api/login', throttle(15, 15 * 60 * 1000), async (req, res) => {
       const until = new Date(u.self_excluded_until).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
       return res.status(403).json({ error: `You have self-excluded until ${until}. This is for your wellbeing.` });
     }
-    const token = jwt.sign({ id: u.id, username: u.username }, JWT_SECRET, { expiresIn: '7d' });
+    const token = jwt.sign({ id: u.id, username: u.username, v: u.token_version||0 }, JWT_SECRET, { expiresIn: '7d' });
     res.json({ token, user: publicUser(u) });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
 });
@@ -685,7 +692,7 @@ app.post('/api/reset-password', throttle(10, 15 * 60 * 1000), async (req, res) =
       return res.status(400).json({ error: 'Invalid or expired reset code' });
     resetCodes.delete(key);
     const hash = await bcrypt.hash(newPassword, 10);
-    await db.execute('UPDATE users SET password=? WHERE id=?', [hash, entry.userId]);
+    await db.execute('UPDATE users SET password=?,token_version=token_version+1 WHERE id=?', [hash, entry.userId]);
     return res.json({ success: true });
   } catch (e) { console.error('Password reset failed:', e.message); return res.status(500).json({ error: 'Unable to reset password' }); }
 });
@@ -884,8 +891,8 @@ async function adminAuth(req, res, next) {
   if (!token) return res.status(401).json({ error: 'No token' });
   try {
     const payload = jwt.verify(token, JWT_SECRET);
-    const [rows] = await db.execute('SELECT is_admin FROM users WHERE id=?', [payload.id]);
-    if (!rows.length || !rows[0].is_admin) return res.status(403).json({ error: 'Admin access required' });
+    const [rows] = await db.execute('SELECT is_admin,is_banned,token_version FROM users WHERE id=?', [payload.id]);
+    if (!rows.length || !rows[0].is_admin || rows[0].is_banned || (rows[0].token_version||0)!==(payload.v||0)) return res.status(403).json({ error: 'Admin access required' });
     req.user = payload; next();
   } catch { res.status(401).json({ error: 'Invalid token' }); }
 }
@@ -1300,8 +1307,8 @@ async function joinSocketTable(socket,tableId,token,inviteCode){
   if(table.seats.some(s=>s&&s.userId===u.id))return socket.emit('error_msg','Already seated at this table');
   let name=u.username,avatar=null;
   try{
-    const [rows]=await db.execute('SELECT username,display_name,avatar,is_banned FROM users WHERE id=?',[u.id]);
-    if(!rows.length||rows[0].is_banned)return socket.emit('error_msg','Account not available');
+    const [rows]=await db.execute('SELECT username,display_name,avatar,is_banned,token_version FROM users WHERE id=?',[u.id]);
+    if(!rows.length||rows[0].is_banned||(rows[0].token_version||0)!==(u.v||0))return socket.emit('error_msg','Session expired or account unavailable');
     name=rows[0].display_name||u.username;
     avatar=rows[0].avatar;
   }catch(e){return socket.emit('error_msg','Unable to load account');}
