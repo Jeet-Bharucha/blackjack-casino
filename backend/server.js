@@ -212,6 +212,12 @@ async function connectDB() {
       verify_status  VARCHAR(20)   NOT NULL DEFAULT 'not_required',
       token_version  INT NOT NULL DEFAULT 0,
       is_admin       TINYINT(1)    NOT NULL DEFAULT 0,
+      is_banned      TINYINT(1)    NOT NULL DEFAULT 0,
+      self_excluded_until DATETIME NULL,
+      deposit_limit INT NULL,
+      referral_code VARCHAR(40) NULL,
+      referred_by INT NULL,
+      last_weekly_bonus DATETIME NULL,
       id_document         MEDIUMTEXT    NULL,
       selfie_photo        MEDIUMTEXT    NULL,
       verified_at         DATETIME      NULL,
@@ -415,32 +421,42 @@ async function connectDB() {
     )
   `);
 
-  // ALTER TABLE for existing deployments — safe to run every boot
-  const alterColumns = [
-    "ALTER TABLE users ADD COLUMN has_bonus_slot      TINYINT(1)  NOT NULL DEFAULT 0    AFTER verified_at",
-    "ALTER TABLE users ADD COLUMN has_insurance_boost TINYINT(1)  NOT NULL DEFAULT 0    AFTER has_bonus_slot",
-    "ALTER TABLE users ADD COLUMN last_bonus_slot_date DATE        NULL                  AFTER has_insurance_boost",
-    "ALTER TABLE users ADD COLUMN equipped_badge      VARCHAR(50) NULL                  AFTER last_bonus_slot_date",
-    "ALTER TABLE users ADD COLUMN equipped_name_color VARCHAR(30) NULL                  AFTER equipped_badge",
-    "ALTER TABLE users ADD COLUMN equipped_border     VARCHAR(30) NULL                  AFTER equipped_name_color",
-    "ALTER TABLE users ADD COLUMN token_version INT NOT NULL DEFAULT 0",
-  ];
-  for (const sql of alterColumns) {
-    try { await db.execute(sql); } catch (e) { /* column already exists — ignore */ }
+  // Existing TiDB tables predate several account/security features.
+  // CREATE TABLE IF NOT EXISTS does not update existing tables: inspect actual
+  // columns and add missing ones before accepting logins or serving requests.
+  const requiredUserColumns = {
+    has_bonus_slot: 'TINYINT(1) NOT NULL DEFAULT 0',
+    has_insurance_boost: 'TINYINT(1) NOT NULL DEFAULT 0',
+    last_bonus_slot_date: 'DATE NULL',
+    equipped_badge: 'VARCHAR(50) NULL',
+    equipped_name_color: 'VARCHAR(30) NULL',
+    equipped_border: 'VARCHAR(30) NULL',
+    token_version: 'INT NOT NULL DEFAULT 0',
+    is_banned: 'TINYINT(1) NOT NULL DEFAULT 0',
+    self_excluded_until: 'DATETIME NULL',
+    deposit_limit: 'INT NULL',
+    referral_code: 'VARCHAR(40) NULL',
+    referred_by: 'INT NULL',
+    last_weekly_bonus: 'DATETIME NULL',
+  };
+  const [currentUserColumns] = await db.query('SHOW COLUMNS FROM users');
+  const present = new Set(currentUserColumns.map(col => col.Field));
+  for (const [column, definition] of Object.entries(requiredUserColumns)) {
+    if (present.has(column)) continue;
+    try {
+      // Column names and definitions only come from this hardcoded map.
+      await db.query(`ALTER TABLE users ADD COLUMN \`${column}\` ${definition}`);
+      console.log('✅ Added missing users column:', column);
+    } catch (error) {
+      // Another concurrent deployment could add it first.
+      if (error.code !== 'ER_DUP_FIELDNAME') throw error;
+    }
   }
-
-  // The old migration loop ignores failures; explicitly verify this required column.
-  const [versionRows] = await db.query(
-    "SELECT COUNT(*) AS present FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='users' AND column_name='token_version'"
-  );
-  if (!Number(versionRows[0]?.present)) {
-    await db.query("ALTER TABLE users ADD COLUMN token_version INT NOT NULL DEFAULT 0");
-  }
-  const [verifiedVersion] = await db.query(
-    "SELECT COUNT(*) AS present FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='users' AND column_name='token_version'"
-  );
-  if (!Number(verifiedVersion[0]?.present))
-    throw new Error('Required users.token_version column is missing');
+  const [afterMigration] = await db.query('SHOW COLUMNS FROM users');
+  const finalColumns = new Set(afterMigration.map(col => col.Field));
+  const missingColumns = Object.keys(requiredUserColumns).filter(col => !finalColumns.has(col));
+  if (missingColumns.length)
+    throw new Error('Required users columns missing after migration: ' + missingColumns.join(', '));
 
   dbReady = true;
   console.log('✅ MySQL connected and tables ready');
