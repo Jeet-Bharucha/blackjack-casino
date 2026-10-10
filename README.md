@@ -1,6 +1,6 @@
 # ♠ Blackjack Casino Royale
 
-A full-stack Blackjack portfolio game with trusted solo rounds, private practice tables, cosmetics, tournaments, leaderboards, and daily challenges. Real-money purchases are disabled by default.
+A free-to-play Blackjack portfolio game with server-controlled solo rounds, practice tables with friends, cosmetics, tournaments, leaderboards, and daily challenges. Players cannot buy chips, cash out, or win prizes of monetary value.
 
 🌐 **Live Site:** [blackjack-casino-inky.vercel.app](https://blackjack-casino-inky.vercel.app)
 
@@ -14,7 +14,7 @@ A full-stack Blackjack portfolio game with trusted solo rounds, private practice
 | Backend | Node.js, Express.js |
 | Database | TiDB Cloud (MySQL-compatible) |
 | Real-time | Socket.IO |
-| Payments | Disabled by default (optional integration) |
+| Payments | None: virtual chips and prizes have no monetary value |
 | Email | Resend API |
 | Auth | JWT (JSON Web Tokens), bcryptjs |
 | Deployment | Render (backend), Vercel (frontend) |
@@ -56,20 +56,19 @@ A full-stack Blackjack portfolio game with trusted solo rounds, private practice
 - Live leaderboard during active tournaments
 - Recent results history
 
-### 💳 Payments
-- Stripe Checkout for chip packages ($0.99 – $9.99)
-- Invoice email sent automatically after purchase
-- Transaction history page
+### 🆓 Free Play
+- Free virtual chips through account signup, daily bonuses and challenges
+- Cosmetic items can be earned with in-game chips only
+- No purchases, subscriptions, cash prizes or withdrawals
 
 ### 🛡️ Responsible Gambling
-- Monthly deposit limits
-- Self-exclusion (1 day to 90 days)
+- Free-play controls and self-exclusion (1 day to 90 days)
 - Links to gambling support resources
 
 ### 📊 History & Transparency
 - Full game history with hand-by-hand breakdown
 - Win rate, biggest win, and profit/loss stats
-- Transaction history for all purchases
+- Virtual-chip cosmetics transaction history
 
 ### ⚙️ Admin Panel
 - Create and manage tournaments
@@ -98,7 +97,6 @@ BlackjackApp/
 ├── terms.html              # Terms of Service
 ├── privacy.html            # Privacy Policy
 ├── verify-age.html         # Legacy link: no ID upload, continue to game
-├── success.html            # Payment success page
 ├── cookie-banner.js        # Cookie consent banner
 ├── favicon.svg             # Gold spade favicon
 ├── vercel.json             # Vercel deployment config
@@ -112,7 +110,6 @@ BlackjackApp/
 ### Prerequisites
 - Node.js v18+
 - MySQL database
-- Stripe account (optional for payments)
 - Resend account (optional for emails)
 
 ### Setup
@@ -137,7 +134,6 @@ BlackjackApp/
    DB_PASSWORD=your_password
    DB_NAME=blackjack
    JWT_SECRET=your_jwt_secret
-   STRIPE_SECRET_KEY=sk_test_...
    RESEND_API_KEY=re_...
    APP_URL=http://localhost:4000
    ```
@@ -159,7 +155,6 @@ BlackjackApp/
 | **Render** | Hosts the Node.js backend | 
 | **TiDB Cloud** | Hosts the MySQL-compatible database |
 | **Vercel** | Hosts the static frontend HTML/CSS/JS |
-| **Stripe** | Processes real payments |
 | **Resend** | Sends transactional emails |
 
 ---
@@ -174,19 +169,16 @@ BlackjackApp/
 | `DB_PASSWORD` | MySQL password |
 | `DB_NAME` | Database name |
 | `JWT_SECRET` | Secret key for JWT tokens |
-| `STRIPE_SECRET_KEY` | Stripe secret API key |
-| `STRIPE_WEBHOOK_SECRET` | Stripe webhook signing secret |
 | `RESEND_API_KEY` | Resend email API key |
 | `APP_URL` | Canonical frontend URL (Vercel) |
 | `FRONTEND_ORIGINS` | Optional comma-separated list of allowed browser origins |
 | `EMAIL_FROM` | Verified sender address for Resend password-reset messages |
-| `ENABLE_REAL_MONEY_PURCHASES` | Defaults off; only consider enabling after legal/provider review |
 
 ---
 
 ## Resume Description
 
-> **Blackjack Casino Royale** — Full-stack web application built with Node.js, Express, MySQL, and Socket.IO. Features include real-time multiplayer, Stripe payment integration, JWT authentication, a cosmetics shop with 50+ items, VIP progression system, tournament system, and automated email invoicing via Resend API. Deployed on Render (backend), TiDB Cloud (database), and Vercel (frontend).
+> **Blackjack Casino Royale** — Full-stack web application built with Node.js, Express, MySQL, and Socket.IO. Features include server-authoritative Blackjack, real-time multiplayer, JWT authentication, a virtual-chip cosmetics shop, VIP progression, tournaments, and account recovery emails via Resend API. Deployed on Render (backend), TiDB Cloud (database), and Vercel (frontend).
 
 ---
 
@@ -198,7 +190,7 @@ BlackjackApp/
 - **Private multiplayer:** invitation codes, invite links and ready-up for 2+ players. Private/public live tables use a **separate temporary 1,000-chip practice stack**. They do not change account balances or rankings.
 - **Season leaderboard:** `/api/leaderboard/season` ranks only `solo_results` recorded by the authoritative engine. Older untrusted historic rows do not count toward the season.
 - **Daily challenges:** earn and claim virtual-chip bonuses from verified solo rounds via `/api/challenges` and `/api/challenges/claim` (one claim per challenge per UTC day).
-- **Free-play payments:** checkout and subscriptions are disabled unless `ENABLE_REAL_MONEY_PURCHASES=true` and valid Stripe secrets are supplied. Do not enable real-money features without appropriate legal/payment provider review.
+- **No payment endpoints:** checkout, payment verification, subscriptions, webhook credits, and the payment SDK have been removed from active code. Neither the site nor API accepts paid chip purchases or cash redemptions.
 - **Authentication:** login throttling, password-reset codes delivered by email (never returned in responses), and token invalidation after password reset. Account resets require a working `RESEND_API_KEY` and approved `EMAIL_FROM`; otherwise the reset route reports that email is not configured.
 - **Player experience:** saved mute setting, card-deal animations, reduced-motion support, and improved small-screen multiplayer layout.
 - **Age gate:** registration uses a self-reported date of birth (21+). This **does not independently verify age**.
@@ -208,6 +200,12 @@ BlackjackApp/
 Run `cd backend && npm test` for game-engine unit tests. On a test deployment, verify `GET /api/health`, registration, gameplay, shop purchases with virtual chips, challenge claims, leaderboard, password reset email delivery, and multiplayer private invitations.
 
 **Legacy data caution:** Existing ID/selfie images from the old verification flow may still be present in your database. The old upload endpoints have been removed, but images already stored or backed up were not deleted by these changes. Review and safely purge those records separately after confirming any retention obligations.
+
+## Publishing and possible monetization
+
+The site is already publicly accessible via Vercel. Advertising, sponsorships or licensing the code **may** be possible, subject to publisher approvals and local rules for simulated casino-style games; ad network eligibility and revenue are **not guaranteed**. Do not sell or redeem chips, award cash or prizes for Blackjack outcomes, or enable paid entry without specialized legal and payment-provider review. Virtual chips are play-only and have no cash value.
+
+The old `stripe_purchases` database table, if present in an older deployment, is left untouched for archival/retention purposes but is no longer written to or queried by the application. Removing the integration does not revoke old keys or purge Git history; revoke any previously exposed real secrets separately.
 
 ## License
 
