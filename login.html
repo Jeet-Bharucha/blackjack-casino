@@ -165,7 +165,7 @@
     <div class="field">
       <label>Password</label>
       <div class="pw-wrap">
-        <input type="password" id="regPassword" placeholder="Min. 6 characters" required minlength="6" autocomplete="new-password"/>
+        <input type="password" id="regPassword" placeholder="Min. 10 characters" required minlength="10" autocomplete="new-password"/>
         <button type="button" class="pw-toggle" onclick="togglePw('regPassword', this)" tabindex="-1">👁</button>
       </div>
     </div>
@@ -193,7 +193,7 @@
     <div style="text-align:center;margin-bottom:4px;color:#ffd764;letter-spacing:2px;font-size:13px;">New Password</div>
     <div class="reset-code-box">
       <div class="reset-code-label">Your Reset Code</div>
-      <div class="reset-code-value" id="shownCode">——</div>
+      <div class="reset-code-note" id="shownCode">Check your email for a six-digit reset code.</div>
       <div class="reset-code-note">Copy this code — it expires in 15 minutes</div>
     </div>
     <div class="field">
@@ -203,7 +203,7 @@
     <div class="field">
       <label>New Password</label>
       <div class="pw-wrap">
-        <input type="password" id="resetPassword" placeholder="Min. 6 characters" minlength="6" autocomplete="new-password"/>
+        <input type="password" id="resetPassword" placeholder="Min. 10 characters" minlength="10" autocomplete="new-password"/>
         <button type="button" class="pw-toggle" onclick="togglePw('resetPassword', this)" tabindex="-1">👁</button>
       </div>
     </div>
@@ -332,8 +332,7 @@
       });
       const data = await res.json();
       if (!res.ok) { errEl.textContent = data.error; return; }
-      // Show the code (since no email service is configured)
-      document.getElementById('shownCode').textContent = data.resetCode;
+      document.getElementById('shownCode').textContent = 'If that account exists, check its email for the six-digit code.';
       hideAll();
       document.getElementById('resetForm').classList.add('active');
     } catch { errEl.textContent = 'Cannot connect to server. Is it running?'; }

@@ -6,6 +6,8 @@ const mysql      = require('mysql2/promise');
 const bcrypt     = require('bcryptjs');
 const jwt        = require('jsonwebtoken');
 const path       = require('path');
+const crypto     = require('crypto');
+const soloGame   = require('./solo-engine');
 require('dotenv').config();
 
 // ── EMAIL (Resend) ────────────────────────────────────
@@ -18,16 +20,16 @@ if (process.env.RESEND_API_KEY) {
 }
 
 async function sendEmail({ to, subject, html }) {
-  if (!resendApiKey) return;
+  if (!resendApiKey) return false;
   try {
-    const res = await fetch('https://api.resend.com/emails', {
+    const response = await fetch('https://api.resend.com/emails', {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${resendApiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ from: 'Blackjack Casino <onboarding@resend.dev>', to, subject, html }),
+      headers: { Authorization: `Bearer ${resendApiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from: process.env.EMAIL_FROM || 'Blackjack Casino <onboarding@resend.dev>', to, subject, html }),
     });
-    if (!res.ok) { const e = await res.json(); console.warn('Resend error:', e.message); }
-    else console.log('✅ Email sent to', to);
-  } catch (e) { console.warn('Email send failed:', e.message); }
+    if (!response.ok) { console.warn('Resend response:', response.status); return false; }
+    return true;
+  } catch (e) { console.warn('Email sending failed:', e.message); return false; }
 }
 
 function receiptEmailHTML({ username, chips, amount, newBalance, pkg }) {
@@ -83,7 +85,33 @@ const stripe = process.env.STRIPE_SECRET_KEY && !process.env.STRIPE_SECRET_KEY.i
   : null;
 if (!stripe) console.warn('⚠️  Stripe not configured — set STRIPE_SECRET_KEY in .env');
 
-app.use(cors());
+app.set('trust proxy', 1);
+const allowedOrigins = (process.env.FRONTEND_ORIGINS ||
+  'https://blackjack-casino-inky.vercel.app,https://blackjack-casino-jeet-bharucha-s-projects.vercel.app,https://blackjack-casino-git-master-jeet-bharucha-s-projects.vercel.app,https://blackjack-casino-nob6.onrender.com')
+  .split(',').map(x => x.trim()).filter(Boolean);
+app.use(cors({ origin(origin, cb) {
+  return cb(null, !origin || allowedOrigins.includes(origin));
+} }));
+const requestCounters = new Map();
+function throttle(maxAttempts, windowMs) {
+  return (req, res, next) => {
+    const key = req.path + ':' + req.ip, now = Date.now();
+    const bucket = requestCounters.get(key);
+    if (!bucket || bucket.expires <= now) {
+      requestCounters.set(key, { count: 1, expires: now + windowMs });
+    } else {
+      if (bucket.count >= maxAttempts) {
+        res.set('Retry-After', String(Math.ceil((bucket.expires-now)/1000)));
+        return res.status(429).json({ error: 'Too many attempts. Please try again later.' });
+      }
+      bucket.count++;
+    }
+    if (requestCounters.size > 5000) {
+      for (const [k, v] of requestCounters) if (v.expires < now) requestCounters.delete(k);
+    }
+    next();
+  };
+}
 
 // Stripe webhook needs raw body — must be registered BEFORE express.json()
 app.post('/api/stripe-webhook', express.raw({ type: 'application/json' }), async (req, res) => {
@@ -181,6 +209,7 @@ async function connectDB() {
       created_at     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
       date_of_birth  DATE          NULL,
       verify_status  VARCHAR(20)   NOT NULL DEFAULT 'not_required',
+      token_version  INT NOT NULL DEFAULT 0,
       is_admin       TINYINT(1)    NOT NULL DEFAULT 0,
       id_document         MEDIUMTEXT    NULL,
       selfie_photo        MEDIUMTEXT    NULL,
@@ -351,6 +380,40 @@ async function connectDB() {
     )
   `);
 
+  // A single active solo game per user persists through Render restarts.
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS solo_games (
+      user_id INT NOT NULL PRIMARY KEY,
+      state_json LONGTEXT NOT NULL,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `);
+
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS solo_results (
+      round_id VARCHAR(36) PRIMARY KEY,
+      user_id INT NOT NULL,
+      result VARCHAR(20) NOT NULL,
+      bet INT NOT NULL,
+      payout INT NOT NULL,
+      net INT NOT NULL,
+      played_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      INDEX ix_season (played_at, user_id),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `);
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS daily_challenge_claims (
+      user_id INT NOT NULL,
+      day DATE NOT NULL,
+      challenge_key VARCHAR(30) NOT NULL,
+      claimed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (user_id,day,challenge_key),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `);
+
   // ALTER TABLE for existing deployments — safe to run every boot
   const alterColumns = [
     "ALTER TABLE users ADD COLUMN has_bonus_slot      TINYINT(1)  NOT NULL DEFAULT 0    AFTER verified_at",
@@ -359,6 +422,7 @@ async function connectDB() {
     "ALTER TABLE users ADD COLUMN equipped_badge      VARCHAR(50) NULL                  AFTER last_bonus_slot_date",
     "ALTER TABLE users ADD COLUMN equipped_name_color VARCHAR(30) NULL                  AFTER equipped_badge",
     "ALTER TABLE users ADD COLUMN equipped_border     VARCHAR(30) NULL                  AFTER equipped_name_color",
+    "ALTER TABLE users ADD COLUMN token_version INT NOT NULL DEFAULT 0",
   ];
   for (const sql of alterColumns) {
     try { await db.execute(sql); } catch (e) { /* column already exists — ignore */ }
@@ -436,11 +500,16 @@ const VIP_PERKS = {
 };
 
 // ── AUTH MIDDLEWARE ───────────────────────────────────
-function auth(req, res, next) {
-  const token = req.headers.authorization?.split(' ')[1];
-  if (!token) return res.status(401).json({ error: 'No token' });
-  try { req.user = jwt.verify(token, JWT_SECRET); next(); }
-  catch { res.status(401).json({ error: 'Invalid token' }); }
+async function auth(req, res, next) {
+  const token=req.headers.authorization?.split(' ')[1];
+  if(!token)return res.status(401).json({error:'No token'});
+  try {
+    const user=jwt.verify(token,JWT_SECRET);
+    const [rows]=await db.execute('SELECT is_banned,token_version FROM users WHERE id=?',[user.id]);
+    if(!rows.length||rows[0].is_banned||(rows[0].token_version||0)!==(user.v||0))
+      return res.status(401).json({error:'Session is no longer valid'});
+    req.user=user;next();
+  }catch(e){res.status(401).json({error:'Session is no longer valid'});}
 }
 function verifyToken(token) {
   try { return jwt.verify(token, JWT_SECRET); } catch { return null; }
@@ -508,12 +577,12 @@ async function checkAndUnlockAchievements(userId, u, result, bet, newBalance) {
 }
 
 // ── AUTH ROUTES ───────────────────────────────────────
-app.post('/api/register', async (req, res) => {
+app.post('/api/register', throttle(8, 60 * 60 * 1000), async (req, res) => {
   try {
     const { username, email, password, dateOfBirth } = req.body;
     if (!username || !email || !password) return res.status(400).json({ error: 'All fields required' });
     if (username.length < 3 || username.length > 20) return res.status(400).json({ error: 'Username must be 3–20 characters' });
-    if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' });
+    if (password.length < 10 || password.length > 128) return res.status(400).json({ error: 'Password must be 10–128 characters' });
 
     // Self-reported age gate: 21+ only. This does not verify identity.
     if (typeof dateOfBirth !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(dateOfBirth)) {
@@ -538,7 +607,7 @@ app.post('/api/register', async (req, res) => {
       'INSERT INTO users (username, email, password, balance, date_of_birth, verify_status) VALUES (?,?,?,500,?,?)',
       [username, email.toLowerCase(), hash, dateOfBirth, 'not_required']
     );
-    const token = jwt.sign({ id: result.insertId, username }, JWT_SECRET, { expiresIn: '7d' });
+    const token = jwt.sign({ id: result.insertId, username, v: 0 }, JWT_SECRET, { expiresIn: '7d' });
 
     // Send welcome email
     await sendEmail({
@@ -564,7 +633,7 @@ app.post('/api/register', async (req, res) => {
   } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
 });
 
-app.post('/api/login', async (req, res) => {
+app.post('/api/login', throttle(15, 15 * 60 * 1000), async (req, res) => {
   try {
     const { email, password } = req.body;
     const [rows] = await db.execute('SELECT * FROM users WHERE email=?', [email?.toLowerCase()]);
@@ -576,46 +645,56 @@ app.post('/api/login', async (req, res) => {
       const until = new Date(u.self_excluded_until).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
       return res.status(403).json({ error: `You have self-excluded until ${until}. This is for your wellbeing.` });
     }
-    const token = jwt.sign({ id: u.id, username: u.username }, JWT_SECRET, { expiresIn: '7d' });
+    const token = jwt.sign({ id: u.id, username: u.username, v: u.token_version||0 }, JWT_SECRET, { expiresIn: '7d' });
     res.json({ token, user: publicUser(u) });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
 });
 
 // ── FORGOT / RESET PASSWORD ───────────────────────────
-const resetCodes = new Map(); // email -> { code, expires }
-
-app.post('/api/forgot-password', async (req, res) => {
+// Codes are delivered by email only, never displayed by the API.
+const resetCodes = new Map();
+app.post('/api/forgot-password', throttle(5, 15 * 60 * 1000), async (req, res) => {
+  const generic = { success: true, message: 'If the account exists, a reset code will be emailed.' };
   try {
-    const { email } = req.body;
-    if (!email) return res.status(400).json({ error: 'Email required' });
-    const [rows] = await db.execute('SELECT id, username FROM users WHERE email=?', [email.toLowerCase()]);
-    if (!rows.length) return res.status(400).json({ error: 'No account found with that email' });
-
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
-    const expires = Date.now() + 15 * 60 * 1000; // 15 minutes
-    resetCodes.set(email.toLowerCase(), { code, expires, userId: rows[0].id });
-
-    // In a real app this code would be emailed. We return it so the local app works.
-    res.json({ success: true, resetCode: code, message: 'Reset code generated (shown here since no email service is configured)' });
-  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
+    const email = typeof req.body.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+    if (!email || email.length > 254) return res.status(400).json({ error: 'Valid email required' });
+    if (!resendApiKey) return res.status(503).json({ error: 'Password reset email is not configured. Contact the site owner.' });
+    const [rows] = await db.execute('SELECT id FROM users WHERE email=?', [email]);
+    if (rows.length) {
+      const code = String(crypto.randomInt(100000, 1000000));
+      const delivered = await sendEmail({
+        to: email, subject: 'Your Blackjack Casino password reset code',
+        html: `<p>Your reset code is <strong>${code}</strong>. It expires in 15 minutes. If you did not request this, ignore this email.</p>`,
+      });
+      if (delivered) resetCodes.set(email, {
+        hash: crypto.createHash('sha256').update(code).digest('hex'),
+        expires: Date.now() + 15 * 60 * 1000, userId: rows[0].id, attempts: 0,
+      });
+    }
+    return res.json(generic);
+  } catch (e) { console.error('Reset request failed:', e.message); return res.status(500).json({ error: 'Unable to process reset request' }); }
 });
-
-app.post('/api/reset-password', async (req, res) => {
+app.post('/api/reset-password', throttle(10, 15 * 60 * 1000), async (req, res) => {
   try {
     const { email, code, newPassword } = req.body;
-    if (!email || !code || !newPassword) return res.status(400).json({ error: 'All fields required' });
-    if (newPassword.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' });
-
-    const entry = resetCodes.get(email.toLowerCase());
-    if (!entry) return res.status(400).json({ error: 'No reset code found. Please request a new one.' });
-    if (Date.now() > entry.expires) { resetCodes.delete(email.toLowerCase()); return res.status(400).json({ error: 'Reset code expired. Please request a new one.' }); }
-    if (entry.code !== code.trim()) return res.status(400).json({ error: 'Incorrect reset code' });
-
+    if (typeof email !== 'string' || typeof code !== 'string' || typeof newPassword !== 'string')
+      return res.status(400).json({ error: 'Email, code and new password required' });
+    if (newPassword.length < 10 || newPassword.length > 128)
+      return res.status(400).json({ error: 'Password must be 10–128 characters' });
+    const key = email.trim().toLowerCase(), entry = resetCodes.get(key);
+    if (!entry || entry.expires < Date.now() || entry.attempts >= 5) {
+      resetCodes.delete(key);
+      return res.status(400).json({ error: 'Invalid or expired reset code' });
+    }
+    entry.attempts++;
+    const actual = crypto.createHash('sha256').update(code.trim()).digest();
+    if (!crypto.timingSafeEqual(actual, Buffer.from(entry.hash, 'hex')))
+      return res.status(400).json({ error: 'Invalid or expired reset code' });
+    resetCodes.delete(key);
     const hash = await bcrypt.hash(newPassword, 10);
-    await db.execute('UPDATE users SET password=? WHERE id=?', [hash, entry.userId]);
-    resetCodes.delete(email.toLowerCase());
-    res.json({ success: true, message: 'Password updated successfully' });
-  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
+    await db.execute('UPDATE users SET password=?,token_version=token_version+1 WHERE id=?', [hash, entry.userId]);
+    return res.json({ success: true });
+  } catch (e) { console.error('Password reset failed:', e.message); return res.status(500).json({ error: 'Unable to reset password' }); }
 });
 
 app.get('/api/me', auth, async (req, res) => {
@@ -696,6 +775,8 @@ const CHIP_PACKAGES = {
 };
 
 app.post('/api/buy-coins', auth, async (req, res) => {
+  if (process.env.ENABLE_REAL_MONEY_PURCHASES !== 'true' || !stripe)
+    return res.status(503).json({ error: 'Paid chip purchases are disabled for free-play mode.' });
   const { package: pkg } = req.body;
   const pack = CHIP_PACKAGES[pkg];
   if (!pack) return res.status(400).json({ error: 'Invalid package' });
@@ -776,35 +857,32 @@ app.get('/api/verify-payment', auth, async (req, res) => {
 });
 
 // ── DAILY BONUS ───────────────────────────────────────
-app.post('/api/daily-bonus', auth, async (req, res) => {
-  try {
-    const [rows] = await db.execute('SELECT * FROM users WHERE id=?', [req.user.id]);
-    if (!rows.length) return res.status(404).json({ error: 'Not found' });
-    const u = rows[0];
-    const today = new Date().toISOString().slice(0,10);
-    const lastBonus = u.last_daily_bonus ? u.last_daily_bonus.toISOString().slice(0,10) : null;
-    const lastSlotDate = u.last_bonus_slot_date ? u.last_bonus_slot_date.toISOString().slice(0,10) : null;
-
-    // First claim of the day
-    if (lastBonus !== today) {
-      const yesterday = new Date(Date.now()-86400000).toISOString().slice(0,10);
-      const newStreak = lastBonus === yesterday ? u.streak + 1 : 1;
-      const bonus = getDailyBonus(newStreak, u.vip_tier);
-      await db.execute('UPDATE users SET balance=balance+?, streak=?, last_daily_bonus=? WHERE id=?', [bonus, newStreak, today, u.id]);
-      const [updated] = await db.execute('SELECT balance FROM users WHERE id=?', [u.id]);
-      return res.json({ bonus, newBalance: updated[0].balance, streak: newStreak, isSecondClaim: false });
-    }
-
-    // Second claim — only if user has bonus_slot perk and hasn't used it today
-    if (u.has_bonus_slot && lastSlotDate !== today) {
-      const bonus = getDailyBonus(u.streak, u.vip_tier);
-      await db.execute('UPDATE users SET balance=balance+?, last_bonus_slot_date=? WHERE id=?', [bonus, today, u.id]);
-      const [updated] = await db.execute('SELECT balance FROM users WHERE id=?', [u.id]);
-      return res.json({ bonus, newBalance: updated[0].balance, streak: u.streak, isSecondClaim: true });
-    }
-
-    return res.status(400).json({ error: 'Already claimed today' });
-  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
+app.post('/api/daily-bonus', auth, throttle(30,10*60*1000), async(req,res)=>{
+  const conn=await db.getConnection();
+  try{
+    await conn.beginTransaction();
+    const [[u]]=await conn.execute('SELECT * FROM users WHERE id=? FOR UPDATE',[req.user.id]);
+    if(!u)throw clientError('Account not found',404);
+    const today=new Date().toISOString().slice(0,10);
+    const normalize=date=>date?new Date(date).toISOString().slice(0,10):null;
+    const lastBonus=normalize(u.last_daily_bonus);
+    const lastSlot=normalize(u.last_bonus_slot_date);
+    let bonus=0,streak=u.streak,second=false;
+    if(lastBonus!==today){
+      const yesterday=new Date(Date.now()-86400000).toISOString().slice(0,10);
+      streak=lastBonus===yesterday?u.streak+1:1;
+      bonus=getDailyBonus(streak,u.vip_tier);
+      await conn.execute('UPDATE users SET balance=balance+?,streak=?,last_daily_bonus=? WHERE id=?',
+        [bonus,streak,today,u.id]);
+    }else if(u.has_bonus_slot&&lastSlot!==today){
+      bonus=getDailyBonus(streak,u.vip_tier);second=true;
+      await conn.execute('UPDATE users SET balance=balance+?,last_bonus_slot_date=? WHERE id=?',
+        [bonus,today,u.id]);
+    }else throw clientError('Already claimed today');
+    await conn.commit();
+    return res.json({bonus,newBalance:u.balance+bonus,streak,isSecondClaim:second});
+  }catch(e){await conn.rollback();return soloError(res,e);}
+  finally{conn.release();}
 });
 
 // ── ADMIN MIDDLEWARE ──────────────────────────────────
@@ -813,8 +891,8 @@ async function adminAuth(req, res, next) {
   if (!token) return res.status(401).json({ error: 'No token' });
   try {
     const payload = jwt.verify(token, JWT_SECRET);
-    const [rows] = await db.execute('SELECT is_admin FROM users WHERE id=?', [payload.id]);
-    if (!rows.length || !rows[0].is_admin) return res.status(403).json({ error: 'Admin access required' });
+    const [rows] = await db.execute('SELECT is_admin,is_banned,token_version FROM users WHERE id=?', [payload.id]);
+    if (!rows.length || !rows[0].is_admin || rows[0].is_banned || (rows[0].token_version||0)!==(payload.v||0)) return res.status(403).json({ error: 'Admin access required' });
     req.user = payload; next();
   } catch { res.status(401).json({ error: 'Invalid token' }); }
 }
@@ -889,52 +967,117 @@ app.post('/api/weekly-bonus', auth, async (req, res) => {
   } catch { res.status(500).json({ error: 'Server error' }); }
 });
 
-// ── GAME RESULT ───────────────────────────────────────
-app.post('/api/game/result', auth, async (req, res) => {
+// ── SERVER-AUTHORITATIVE SOLO BLACKJACK ────────────────
+// Never accept results or payout values from a browser.
+async function settleSolo(conn, userId, player, game) {
+  const outcome = game.outcome;
+  if(!outcome) return player.balance;
+  const wins = outcome.hands.filter(h=>['win','double_win','dealer_bust','blackjack'].includes(h.result)).length;
+  const losses = outcome.hands.filter(h=>['bust','lose'].includes(h.result)).length;
+  const pushes = outcome.hands.filter(h=>h.result==='push').length;
+  const blackjacks = outcome.hands.filter(h=>h.result==='blackjack').length;
+  const streak = wins > 0 ? player.win_streak+1 : 0;
+  const net = outcome.net;
+  const points = player.total_won + Math.max(0,net);
+  const biggestWin = Math.max(player.biggest_win,net);
+  const updatedBalance=player.balance+outcome.payout;
+  await conn.execute(`UPDATE users SET balance=?, wins=wins+?, losses=losses+?, pushes=pushes+?,
+    blackjacks=blackjacks+?, total_hands=total_hands+1, total_wagered=total_wagered+?,
+    total_won=?, biggest_win=?, win_streak=?, max_win_streak=?, vip_tier=?
+    WHERE id=?`,
+    [updatedBalance,wins,losses,pushes,blackjacks,outcome.stake,
+    points,biggestWin,streak,Math.max(player.max_win_streak,streak),getVipTier(points),userId]);
+  await conn.execute(`INSERT INTO game_history
+    (user_id,result,bet,payout,balance_after,player_hand,dealer_hand)
+    VALUES (?,?,?,?,?,?,?)`,
+    [userId,outcome.result,outcome.stake,outcome.payout,updatedBalance,
+      outcome.playerHand,outcome.dealerHand]);
+  // Only signed-off server-side rounds count toward rewards and ranked seasons.
+  await conn.execute(`INSERT INTO solo_results (round_id,user_id,result,bet,payout,net)
+     VALUES (?,?,?,?,?,?)`,
+    [game.id,userId,outcome.result,outcome.stake,outcome.payout,outcome.net]);
+  // Tournament rankings are updated only from trusted server-settled hands.
+  await conn.execute(`UPDATE tournament_entries e
+    JOIN tournaments t ON t.id=e.tournament_id
+    SET e.current_chips=GREATEST(0,e.current_chips+?),
+        e.hands_played=e.hands_played+1
+    WHERE e.user_id=? AND t.status='active'
+      AND UTC_TIMESTAMP() BETWEEN t.starts_at AND t.ends_at`,
+    [outcome.net,userId]);
+  return updatedBalance;
+}
+function soloError(res,err) {
+  if (err.clientStatus) return res.status(err.clientStatus).json({ error: err.message });
+  console.error('Solo game failed:',err.message);
+  return res.status(500).json({ error: 'Unable to complete game request' });
+}
+function clientError(message,status=400){const error=new Error(message);error.clientStatus=status;return error;}
+app.get('/api/solo/state', auth, async(req,res)=>{
   try {
-    const { result, bet, payout } = req.body;
-    if (!result || bet == null || payout == null) return res.status(400).json({ error: 'Missing fields' });
-
-    const [rows] = await db.execute('SELECT * FROM users WHERE id=?', [req.user.id]);
-    if (!rows.length) return res.status(404).json({ error: 'Not found' });
-    const u = rows[0];
-
-    let { wins, losses, pushes, blackjacks, total_hands, total_wagered, total_won, biggest_win, balance, win_streak, max_win_streak } = u;
-    total_hands += 1; total_wagered += bet;
-    balance = Math.max(0, balance - bet + payout);
-
-    const isWin = ['win','dealer_bust','blackjack','double_win','split_win'].includes(result);
-    if (result === 'blackjack') {
-      wins++; blackjacks++;
-      const profit = payout - bet; total_won += profit; if (profit > biggest_win) biggest_win = profit;
-      win_streak++;
-    } else if (isWin) {
-      wins++;
-      const profit = payout - bet; total_won += profit; if (profit > biggest_win) biggest_win = profit;
-      win_streak++;
-    } else if (result === 'push') {
-      pushes++; win_streak = 0;
-    } else {
-      losses++; win_streak = 0;
-    }
-    if (win_streak > max_win_streak) max_win_streak = win_streak;
-    if (balance === 0) balance = 0; // let client handle buy-coins prompt
-
-    const vip_tier = getVipTier(total_won);
-
-    await db.execute(`
-      UPDATE users SET balance=?,wins=?,losses=?,pushes=?,blackjacks=?,
-        total_hands=?,total_wagered=?,total_won=?,biggest_win=?,
-        win_streak=?,max_win_streak=?,vip_tier=?
-      WHERE id=?
-    `, [balance,wins,losses,pushes,blackjacks,total_hands,total_wagered,total_won,biggest_win,win_streak,max_win_streak,vip_tier,u.id]);
-
-    const updatedUser = {...u,wins,losses,pushes,blackjacks,total_hands,total_wagered,total_won,biggest_win,win_streak,max_win_streak,balance};
-    const newAchievements = await checkAndUnlockAchievements(u.id, updatedUser, result, bet, balance);
-
-    res.json({ balance, vipTier: vip_tier, tierProgress: getTierProgress(total_won), stats: extractStats(updatedUser), newAchievements });
-  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
+    const [[user]] = await db.execute('SELECT balance FROM users WHERE id=?',[req.user.id]);
+    if(!user)return res.status(404).json({ error:'Account not found' });
+    const [rows]=await db.execute('SELECT state_json FROM solo_games WHERE user_id=?',[req.user.id]);
+    if(!rows.length)return res.json({active:false,balance:user.balance});
+    return res.json(soloGame.view(JSON.parse(rows[0].state_json),user.balance));
+  } catch(e){return soloError(res,e);}
 });
+app.post('/api/solo/start', auth, throttle(100,10*60*1000), async(req,res)=>{
+  const conn=await db.getConnection();
+  try {
+    const bet=req.body.bet;
+    if(!Number.isSafeInteger(bet)||bet<1||bet>100000) throw clientError('Invalid chip amount');
+    await conn.beginTransaction();
+    const [[user]]=await conn.execute('SELECT * FROM users WHERE id=? FOR UPDATE',[req.user.id]);
+    if(!user)throw clientError('Account not found',404);
+    const [active]=await conn.execute('SELECT state_json FROM solo_games WHERE user_id=? FOR UPDATE',[req.user.id]);
+    if(active.length)throw clientError('Finish your current round first',409);
+    if(user.balance<bet)throw clientError('Insufficient chips');
+    const game=soloGame.create(bet);
+    let balance=user.balance-bet;
+    await conn.execute('UPDATE users SET balance=? WHERE id=?',[balance,req.user.id]);
+    if(game.phase==='finished'){
+      balance=await settleSolo(conn,req.user.id,{...user,balance},game);
+    } else {
+      await conn.execute('INSERT INTO solo_games (user_id,state_json) VALUES (?,?)',
+        [req.user.id,JSON.stringify(game)]);
+    }
+    await conn.commit();
+    return res.json(soloGame.view(game,balance));
+  } catch(e){await conn.rollback();return soloError(res,e);}
+  finally{conn.release();}
+});
+app.post('/api/solo/action', auth, throttle(600,10*60*1000), async(req,res)=>{
+  const conn=await db.getConnection();
+  try {
+    const action=req.body.action;
+    if(!['hit','stand','double','split','insurance_yes','insurance_no'].includes(action))
+      throw clientError('Invalid action');
+    await conn.beginTransaction();
+    const [[user]]=await conn.execute('SELECT * FROM users WHERE id=? FOR UPDATE',[req.user.id]);
+    if(!user)throw clientError('Account not found',404);
+    const [rows]=await conn.execute('SELECT state_json FROM solo_games WHERE user_id=? FOR UPDATE',[req.user.id]);
+    if(!rows.length)throw clientError('No active round',409);
+    const game=JSON.parse(rows[0].state_json);
+    let extraStake;
+    try{extraStake=soloGame.play(game,action,user.balance);}
+    catch(e){throw clientError(e.message);}
+    if(extraStake>user.balance)throw clientError('Insufficient chips');
+    let balance=user.balance-extraStake;
+    if(extraStake)await conn.execute('UPDATE users SET balance=? WHERE id=?',[balance,req.user.id]);
+    if(game.phase==='finished'){
+      balance=await settleSolo(conn,req.user.id,{...user,balance},game);
+      await conn.execute('DELETE FROM solo_games WHERE user_id=?',[req.user.id]);
+    } else {
+      await conn.execute('UPDATE solo_games SET state_json=? WHERE user_id=?',[JSON.stringify(game),req.user.id]);
+    }
+    await conn.commit();
+    return res.json(soloGame.view(game,balance));
+  }catch(e){await conn.rollback();return soloError(res,e);}
+  finally{conn.release();}
+});
+// Disabled legacy endpoints previously trusted arbitrary browser winnings.
+app.post('/api/game/result', auth, (req,res)=>
+  res.status(410).json({ error:'Update your game: results are calculated by the server.' }));
 
 // ── TRANSACTIONS ─────────────────────────────────────
 app.get('/api/transactions', auth, async (req, res) => {
@@ -965,17 +1108,8 @@ app.get('/api/game-history', auth, async (req, res) => {
   } catch(err) { res.status(500).json({error:'Server error'}); }
 });
 
-app.post('/api/game-history', auth, async (req, res) => {
-  try {
-    const { result, bet, payout, balanceAfter, playerHand, dealerHand } = req.body;
-    if (!result || !bet) return res.status(400).json({error:'Missing fields'});
-    await db.execute(
-      'INSERT INTO game_history (user_id, result, bet, payout, balance_after, player_hand, dealer_hand) VALUES (?,?,?,?,?,?,?)',
-      [req.user.id, result, bet, payout||0, balanceAfter||0, playerHand||'', dealerHand||'']
-    );
-    res.json({success:true});
-  } catch(err) { res.status(500).json({error:'Server error'}); }
-});
+app.post('/api/game-history', auth, (req, res) =>
+  res.status(410).json({ error: 'Game history is recorded by the server.' }));
 
 // ── PROFILE PAGE ──────────────────────────────────────
 app.get('/api/profile/:username', async (req, res) => {
@@ -1006,6 +1140,77 @@ app.get('/api/leaderboard', async (req, res) => {
   } catch { res.status(500).json({ error: 'Server error' }); }
 });
 
+// ── VERIFIED SEASONS + DAILY CHALLENGES ────────────────
+const CHALLENGES=[
+  {key:'play_3',label:'Play 3 hands',target:3,reward:100},
+  {key:'win_2',label:'Win 2 hands',target:2,reward:125},
+  {key:'blackjack_1',label:'Get a natural Blackjack',target:1,reward:250},
+];
+async function challengeProgress(conn,userId) {
+  const [[stats]]=await conn.execute(`SELECT COUNT(*) as hands,
+    COALESCE(SUM(CASE WHEN result IN ('win','blackjack','dealer_bust','double_win','split_win') THEN 1 ELSE 0 END),0) as wins,
+    COALESCE(SUM(CASE WHEN result='blackjack' THEN 1 ELSE 0 END),0) as naturals
+    FROM solo_results WHERE user_id=? AND DATE(played_at)=UTC_DATE()`,[userId]);
+  const [claims]=await conn.execute(
+    'SELECT challenge_key FROM daily_challenge_claims WHERE user_id=? AND day=UTC_DATE()',[userId]);
+  const claimed=new Set(claims.map(c=>c.challenge_key));
+  return CHALLENGES.map(c=>({
+    ...c, progress:Math.min(c.target,Number(c.key==='play_3'?stats.hands:
+      c.key==='win_2'?stats.wins:stats.naturals)),claimed:claimed.has(c.key),
+  }));
+}
+app.get('/api/challenges',auth,async(req,res)=>{
+  try {return res.json({day:new Date().toISOString().slice(0,10),
+    challenges:await challengeProgress(db,req.user.id)});
+  }catch(e){console.error('Challenges:',e.message);res.status(500).json({error:'Unable to load challenges'});}
+});
+app.post('/api/challenges/claim',auth,throttle(30,10*60*1000),async(req,res)=>{
+  const conn=await db.getConnection();
+  try{
+    const key=req.body.key;
+    const challenge=CHALLENGES.find(c=>c.key===key);
+    if(!challenge)throw clientError('Unknown challenge');
+    await conn.beginTransaction();
+    const [[user]]=await conn.execute('SELECT balance FROM users WHERE id=? FOR UPDATE',[req.user.id]);
+    if(!user)throw clientError('Account not found',404);
+    const challenges=await challengeProgress(conn,req.user.id);
+    const current=challenges.find(c=>c.key===key);
+    if(current.claimed)throw clientError('Already claimed');
+    if(current.progress<challenge.target)throw clientError('Complete the challenge first');
+    const [insert]=await conn.execute(
+      'INSERT IGNORE INTO daily_challenge_claims (user_id,day,challenge_key) VALUES (?,UTC_DATE(),?)',
+      [req.user.id,key]);
+    if(insert.affectedRows!==1)throw clientError('Already claimed');
+    await conn.execute('UPDATE users SET balance=balance+? WHERE id=?',[challenge.reward,req.user.id]);
+    await conn.commit();
+    return res.json({success:true,added:challenge.reward,balance:user.balance+challenge.reward});
+  }catch(e){await conn.rollback();return soloError(res,e);}finally{conn.release();}
+});
+app.get('/api/leaderboard/season',async(req,res)=>{
+  try {
+    const [rows]=await db.execute(`SELECT u.username,u.display_name,u.avatar,
+      u.vip_tier,u.equipped_badge,u.equipped_name_color,u.balance,
+      r.total_hands,r.points,r.wins,r.losses,r.blackjacks
+    FROM (
+      SELECT user_id,COUNT(*) as total_hands,
+        COALESCE(SUM(net),0) as points,
+        COALESCE(SUM(CASE WHEN result IN ('win','dealer_bust','blackjack','double_win','split_win')
+          THEN 1 ELSE 0 END),0) as wins,
+        COALESCE(SUM(CASE WHEN result IN ('lose','bust') THEN 1 ELSE 0 END),0) as losses,
+        COALESCE(SUM(CASE WHEN result='blackjack' THEN 1 ELSE 0 END),0) as blackjacks
+      FROM solo_results WHERE played_at>=DATE_FORMAT(UTC_TIMESTAMP(),'%Y-%m-01')
+      GROUP BY user_id ORDER BY points DESC,wins DESC LIMIT 10
+    ) r JOIN users u ON u.id=r.user_id
+    ORDER BY r.points DESC,r.wins DESC`);
+    res.json(rows.map((r,i)=>({rank:i+1,username:r.username,displayName:r.display_name||r.username,
+      avatar:r.avatar,balance:r.balance,vipTier:r.vip_tier,equippedBadge:r.equipped_badge,
+      equippedNameColor:r.equipped_name_color,points:Number(r.points),
+      totalHands:Number(r.total_hands),wins:Number(r.wins),losses:Number(r.losses),
+      blackjacks:Number(r.blackjacks),winRate:Number(r.total_hands)?
+        Math.round(Number(r.wins)/Number(r.total_hands)*100):0})));
+  }catch(e){console.error('Season ranking:',e.message);res.status(500).json({error:'Unable to load season'});}
+});
+
 // ── MULTIPLAYER (unchanged) ───────────────────────────
 const tables = new Map(), socketToTable = new Map(), socketToUser = new Map();
 const SUITS=['♠','♥','♦','♣'], RANKS=['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
@@ -1014,10 +1219,12 @@ function buildShoe(n=6){ const s=[]; for(let d=0;d<n;d++) for(const su of SUITS)
 function cardValue(r){ if(['J','Q','K'].includes(r)) return 10; if(r==='A') return 11; return parseInt(r); }
 function handTotal(cards){ let t=0,a=0; for(const c of cards){t+=cardValue(c.rank);if(c.rank==='A')a++;} while(t>21&&a>0){t-=10;a--;} return t; }
 function drawCard(shoe){ if(shoe.length<52){const f=buildShoe();shoe.push(...f);} return shoe.pop(); }
-function createTable(name){ return {id:Date.now().toString(36),name,seats:[null,null,null,null,null],phase:'waiting',shoe:buildShoe(),dealerCards:[],currentSeat:-1,betTimer:null,turnTimer:null,chat:[]}; }
+function createTable(name,isPrivate=false){ return {id:crypto.randomBytes(8).toString('hex'),name,
+  isPrivate,inviteCode:isPrivate?crypto.randomBytes(12).toString('hex'):null,
+  seats:[null,null,null,null,null],phase:'waiting',shoe:buildShoe(),dealerCards:[],currentSeat:-1,betTimer:null,turnTimer:null,chat:[]}; }
 
-function tablePublicState(t){ return {id:t.id,name:t.name,phase:t.phase,currentSeat:t.currentSeat,dealerCards:t.phase==='playing'?[t.dealerCards[0],{rank:'?',suit:'?'}]:t.dealerCards,seats:t.seats.map(s=>s?{username:s.username,displayName:s.displayName||s.username,avatar:s.avatar,vipTier:s.vipTier||'Bronze',bet:s.bet,hasBet:s.hasBet,done:s.done,hands:s.hands,balance:s.balance}:null),chat:t.chat.slice(-50),shoeSize:t.shoe.length}; }
-function getTableList(){ return Array.from(tables.values()).map(t=>({id:t.id,name:t.name,phase:t.phase,playerCount:t.seats.filter(Boolean).length})); }
+function tablePublicState(t){ return {id:t.id,name:t.name,phase:t.phase,isPrivate:t.isPrivate,inviteCode:t.inviteCode,currentSeat:t.currentSeat,dealerCards:t.phase==='playing'?[t.dealerCards[0],{rank:'?',suit:'?'}]:t.dealerCards,seats:t.seats.map(s=>s?{username:s.username,displayName:s.displayName||s.username,avatar:s.avatar,vipTier:s.vipTier||'Bronze',bet:s.bet,hasBet:s.hasBet,ready:s.ready,done:s.done,hands:s.hands,balance:s.balance}:null),chat:t.chat.slice(-50),shoeSize:t.shoe.length}; }
+function getTableList(){ return Array.from(tables.values()).filter(t=>!t.isPrivate).map(t=>({id:t.id,name:t.name,phase:t.phase,playerCount:t.seats.filter(Boolean).length})); }
 function broadcastTableList(){ io.emit('table_list',getTableList()); }
 function broadcastTable(t){ io.to(t.id).emit('table_update',tablePublicState(t)); }
 
@@ -1029,10 +1236,12 @@ function startBetTimer(table){
 function clearTimers(t){ if(t.betTimer){clearInterval(t.betTimer);t.betTimer=null;} if(t.turnTimer){clearInterval(t.turnTimer);t.turnTimer=null;} }
 
 function dealRound(table){
-  const active=table.seats.filter(s=>s&&s.hasBet);
-  if(!active.length){table.phase='waiting';broadcastTable(table);return;}
+  const active=table.seats.filter(s=>s&&s.hasBet&&Number.isSafeInteger(s.bet)&&s.bet<=s.balance);
+  if(!active.length){table.phase=table.isPrivate?'waiting':'betting';broadcastTable(table);if(!table.isPrivate)startBetTimer(table);return;}
+  // Private tables use temporary practice chips; never write them to TiDB.
+  for(const seat of active)seat.balance-=seat.bet;
   table.phase='dealing'; table.dealerCards=[];
-  for(const seat of table.seats){ if(!seat||!seat.hasBet) continue; seat.hands=[{cards:[drawCard(table.shoe),drawCard(table.shoe)],bet:seat.bet,doubled:false,done:false}]; seat.activeHand=0; seat.done=false; }
+  for(const seat of table.seats){ if(!seat||!active.includes(seat)) continue; seat.hands=[{cards:[drawCard(table.shoe),drawCard(table.shoe)],bet:seat.bet,doubled:false,done:false}]; seat.activeHand=0; seat.done=false; }
   table.dealerCards=[drawCard(table.shoe),drawCard(table.shoe)]; table.phase='playing'; broadcastTable(table);
   const dTotal=handTotal(table.dealerCards);
   if(dTotal===21){io.to(table.id).emit('game_message',{text:'Dealer has Blackjack!',type:'warn'}); setTimeout(()=>endRound(table),1000); return;}
@@ -1077,40 +1286,88 @@ async function endRound(table){
     }
     seat.balance=Math.max(0,seat.balance+totalPayout);
     results.push({seatIndex:i,username:seat.username,handResults,newBalance:seat.balance});
-    if(seat.userId&&db){try{await db.execute('UPDATE users SET balance=?,total_hands=total_hands+1 WHERE id=?',[seat.balance,seat.userId]);}catch(e){}}
+    // Practice-table balances stay in memory; trusted solo results alone affect rankings.
   }
   table.phase='results'; broadcastTable(table);
   io.to(table.id).emit('round_results',{results,dealerTotal:dTotal,dealerCards:table.dealerCards});
   setTimeout(()=>{
-    for(const seat of table.seats){if(!seat) continue; seat.bet=0;seat.hasBet=false;seat.hands=[];seat.done=false;}
-    table.dealerCards=[]; table.phase=table.seats.some(Boolean)?'betting':'waiting'; broadcastTable(table);
+    for(const seat of table.seats){if(!seat) continue; seat.bet=0;seat.hasBet=false;seat.hands=[];seat.done=false;seat.ready=false;}
+    table.dealerCards=[]; table.phase=table.isPrivate?'waiting':(table.seats.some(Boolean)?'betting':'waiting'); broadcastTable(table);
     if(table.phase==='betting') startBetTimer(table); broadcastTableList();
   },6000);
 }
 
+// Private invitations cannot be discovered from the public table list.
+async function joinSocketTable(socket,tableId,token,inviteCode){
+  const u=verifyToken(token); if(!u)return socket.emit('error_msg','Not authenticated');
+  if(socketToTable.has(socket.id))return socket.emit('error_msg','Already at a table');
+  const table=tables.get(tableId); if(!table)return socket.emit('error_msg','Table not found');
+  if(table.isPrivate && inviteCode!==table.inviteCode)return socket.emit('error_msg','Invite code required');
+  const freeSeat=table.seats.findIndex(s=>s===null);if(freeSeat===-1)return socket.emit('error_msg','Table is full');
+  if(table.seats.some(s=>s&&s.userId===u.id))return socket.emit('error_msg','Already seated at this table');
+  let name=u.username,avatar=null;
+  try{
+    const [rows]=await db.execute('SELECT username,display_name,avatar,is_banned,token_version FROM users WHERE id=?',[u.id]);
+    if(!rows.length||rows[0].is_banned||(rows[0].token_version||0)!==(u.v||0))return socket.emit('error_msg','Session expired or account unavailable');
+    name=rows[0].display_name||u.username;
+    avatar=rows[0].avatar;
+  }catch(e){return socket.emit('error_msg','Unable to load account');}
+  table.seats[freeSeat]={socketId:socket.id,userId:u.id,username:u.username,displayName:name,avatar,
+    vipTier:'Bronze',balance:1000,bet:0,hasBet:false,ready:false,hands:[],activeHand:0,done:false};
+  socketToTable.set(socket.id,table.id);socketToUser.set(socket.id,u);
+  socket.join(table.id);
+  socket.emit('joined_table',{tableId:table.id,seatIndex:freeSeat,balance:1000,
+    isPrivate:table.isPrivate,inviteCode:table.isPrivate?table.inviteCode:null});
+  io.to(table.id).emit('game_message',{text:name+' joined',type:'join'});
+  if(!table.isPrivate && table.phase==='waiting'){table.phase='betting';startBetTimer(table);}
+  broadcastTable(table);broadcastTableList();
+}
 io.on('connection',socket=>{
   socket.emit('table_list',getTableList());
-  socket.on('auth',({token})=>{ const u=verifyToken(token); if(u) socketToUser.set(socket.id,u); });
+  socket.on('auth',({token}={})=>{const u=verifyToken(token);if(u)socketToUser.set(socket.id,u);});
   socket.on('get_tables',()=>socket.emit('table_list',getTableList()));
-  socket.on('create_table',({name,token})=>{ const u=verifyToken(token); if(!u) return socket.emit('error_msg','Not authenticated'); if(socketToTable.has(socket.id)) return; const t=createTable(name||`${u.username}'s Table`); tables.set(t.id,t); broadcastTableList(); socket.emit('table_created',{tableId:t.id}); });
-  socket.on('join_table',async({tableId,token})=>{
-    const u=verifyToken(token); if(!u) return socket.emit('error_msg','Not authenticated');
-    if(socketToTable.has(socket.id)) return socket.emit('error_msg','Already at a table');
-    const table=tables.get(tableId); if(!table) return socket.emit('error_msg','Table not found');
-    const freeSeat=table.seats.findIndex(s=>s===null); if(freeSeat===-1) return socket.emit('error_msg','Table is full');
-    let balance=500,vipTier='Bronze',displayName=u.username,avatar=null;
-    if(db){try{const [rows]=await db.execute('SELECT balance,vip_tier,display_name,avatar FROM users WHERE id=?',[u.id]); if(rows.length){balance=rows[0].balance;vipTier=rows[0].vip_tier;displayName=rows[0].display_name||u.username;avatar=rows[0].avatar;}}catch{}}
-    table.seats[freeSeat]={socketId:socket.id,userId:u.id,username:u.username,displayName,avatar,vipTier,balance,bet:0,hasBet:false,hands:[],activeHand:0,done:false};
-    socketToTable.set(socket.id,tableId); socketToUser.set(socket.id,u);
-    socket.join(tableId); socket.emit('joined_table',{tableId,seatIndex:freeSeat,balance});
-    io.to(tableId).emit('game_message',{text:`${displayName} joined`,type:'join'}); broadcastTable(table); broadcastTableList();
-    if(table.phase==='waiting'&&table.seats.some(Boolean)){table.phase='betting';startBetTimer(table);}
+  socket.on('create_table',(payload={})=>{
+    const {name,token,isPrivate}=payload||{};
+    const u=verifyToken(token); if(!u)return socket.emit('error_msg','Not authenticated');
+    if(socketToTable.has(socket.id))return socket.emit('error_msg','Already at a table');
+    if(tables.size>=100)return socket.emit('error_msg','Too many tables. Try again later.');
+    if(Array.from(tables.values()).some(t=>t.ownerId===u.id && !t.seats.some(Boolean)))
+      return socket.emit('error_msg','You already have an unjoined table.');
+    const safeName=typeof name==='string' ? name.trim().slice(0,36) : '';
+    const t=createTable(safeName||u.username+"'s Table",isPrivate===true);
+    t.ownerId=u.id;
+    tables.set(t.id,t);
+    // Remove unused invitation codes/tables that were created but never joined.
+    setTimeout(()=>{
+      if(tables.get(t.id)===t && !t.seats.some(Boolean)){
+        tables.delete(t.id);broadcastTableList();
+      }
+    },5*60*1000).unref();broadcastTableList();
+    socket.emit('table_created',{tableId:t.id,inviteCode:t.inviteCode});
   });
-  socket.on('place_bet',({amount})=>{ const tableId=socketToTable.get(socket.id); if(!tableId) return; const table=tables.get(tableId); if(!table||table.phase!=='betting') return; const seat=table.seats.find(s=>s?.socketId===socket.id); if(!seat) return; if(amount<1||amount>seat.balance) return socket.emit('error_msg','Invalid bet'); seat.bet=amount; seat.hasBet=true; io.to(tableId).emit('game_message',{text:`${seat.displayName||seat.username} bet $${amount}`,type:'bet'}); broadcastTable(table); });
+  socket.on('join_table',(payload={})=>{
+    const {tableId,token,inviteCode}=payload||{};
+    joinSocketTable(socket,tableId,token,inviteCode);
+  });
+  socket.on('join_private',(payload={})=>{
+    const {inviteCode,token}=payload||{};
+    const code=typeof inviteCode==='string'?inviteCode.trim().toLowerCase():'';
+    const table=Array.from(tables.values()).find(t=>t.isPrivate&&t.inviteCode===code);
+    if(!table)return socket.emit('error_msg','Invite is invalid or the table has closed');
+    joinSocketTable(socket,table.id,token,code);
+  });
+  socket.on('ready_player',()=>{
+    const t=tables.get(socketToTable.get(socket.id));
+    if(!t||!t.isPrivate||t.phase!=='waiting')return;
+    const seat=t.seats.find(s=>s?.socketId===socket.id);if(!seat)return;
+    seat.ready=true;broadcastTable(t);
+    if(t.seats.filter(s=>s?.ready).length>=2){t.phase='betting';startBetTimer(t);broadcastTable(t);}
+  });
+  socket.on('place_bet',(payload={})=>{const amount=payload?.amount; const tableId=socketToTable.get(socket.id); if(!tableId) return; const table=tables.get(tableId); if(!table||table.phase!=='betting') return; const seat=table.seats.find(s=>s?.socketId===socket.id); if(!seat) return; if(!Number.isSafeInteger(amount)||amount<1||amount>seat.balance) return socket.emit('error_msg','Invalid bet'); seat.bet=amount; seat.hasBet=true; io.to(tableId).emit('game_message',{text:`${seat.displayName||seat.username} bet $${amount}`,type:'bet'}); broadcastTable(table); });
   socket.on('mp_hit',()=>{ const tableId=socketToTable.get(socket.id); if(!tableId) return; const table=tables.get(tableId); if(!table||table.phase!=='playing') return; const si=table.seats.findIndex(s=>s?.socketId===socket.id); if(si!==table.currentSeat) return; const seat=table.seats[si]; const hand=seat.hands[seat.activeHand]; hand.cards.push(drawCard(table.shoe)); const total=handTotal(hand.cards); broadcastTable(table); if(total>=21){hand.done=true;if(seat.activeHand+1<seat.hands.length){seat.activeHand++;}else{seat.done=true;clearTimers(table);nextPlayerTurn(table,si+1);}} });
   socket.on('mp_stand',()=>{ const tableId=socketToTable.get(socket.id); if(!tableId) return; const table=tables.get(tableId); if(!table||table.phase!=='playing') return; const si=table.seats.findIndex(s=>s?.socketId===socket.id); if(si!==table.currentSeat) return; const seat=table.seats[si]; seat.hands[seat.activeHand].done=true; clearTimers(table); if(seat.activeHand+1<seat.hands.length){seat.activeHand++;nextPlayerTurn(table,si);}else{seat.done=true;nextPlayerTurn(table,si+1);} });
   socket.on('mp_double',()=>{ const tableId=socketToTable.get(socket.id); if(!tableId) return; const table=tables.get(tableId); if(!table||table.phase!=='playing') return; const si=table.seats.findIndex(s=>s?.socketId===socket.id); if(si!==table.currentSeat) return; const seat=table.seats[si]; if(seat.balance<seat.bet) return socket.emit('error_msg','Insufficient balance'); const hand=seat.hands[seat.activeHand]; if(hand.cards.length!==2) return; seat.balance-=hand.bet; hand.bet*=2; hand.doubled=true; hand.cards.push(drawCard(table.shoe)); hand.done=true; seat.done=true; broadcastTable(table); clearTimers(table); nextPlayerTurn(table,si+1); });
-  socket.on('send_chat',({message})=>{ const tableId=socketToTable.get(socket.id); if(!tableId) return; const table=tables.get(tableId); if(!table||!message?.trim()) return; const u=socketToUser.get(socket.id); const msg={username:u?.username||'Guest',message:message.trim().slice(0,120),time:Date.now()}; table.chat.push(msg); io.to(tableId).emit('new_chat',msg); });
+  socket.on('send_chat',(payload={})=>{const message=payload?.message; const tableId=socketToTable.get(socket.id); if(!tableId) return; const table=tables.get(tableId); if(!table||typeof message!=='string'||!message.trim()) return; const u=socketToUser.get(socket.id); const msg={username:u?.username||'Guest',message:message.trim().slice(0,120),time:Date.now()}; table.chat.push(msg); io.to(tableId).emit('new_chat',msg); });
   socket.on('leave_table',()=>leaveTable(socket));
   socket.on('disconnect',()=>leaveTable(socket));
   function leaveTable(socket){ const tableId=socketToTable.get(socket.id); if(!tableId) return; const table=tables.get(tableId); if(table){const si=table.seats.findIndex(s=>s?.socketId===socket.id); if(si!==-1){const name=table.seats[si].displayName||table.seats[si].username; table.seats[si]=null; io.to(tableId).emit('game_message',{text:`${name} left`,type:'leave'}); if(!table.seats.some(Boolean)){clearTimers(table);tables.delete(tableId);}else{broadcastTable(table);}}} socket.leave(tableId); socketToTable.delete(socket.id); socketToUser.delete(socket.id); broadcastTableList(); }
@@ -1152,40 +1409,34 @@ app.get('/api/tournaments/:id', auth, async (req, res) => {
   } catch (e) { console.error(e); res.status(500).json({ error: 'Server error' }); }
 });
 
-app.post('/api/tournaments/:id/join', auth, async (req, res) => {
+app.post('/api/tournaments/:id/join', auth, throttle(15,60*60*1000), async (req, res) => {
+  const conn=await db.getConnection();
   try {
-    const [rows] = await db.execute('SELECT * FROM tournaments WHERE id=?', [req.params.id]);
-    if (!rows.length) return res.status(404).json({ error: 'Tournament not found' });
-    const t = rows[0];
-    if (t.status === 'ended') return res.status(400).json({ error: 'Tournament has ended' });
-    const [existing] = await db.execute('SELECT id FROM tournament_entries WHERE tournament_id=? AND user_id=?', [t.id, req.user.id]);
-    if (existing.length) return res.status(400).json({ error: 'Already joined this tournament' });
-    const [[{count}]] = await db.execute('SELECT COUNT(*) as count FROM tournament_entries WHERE tournament_id=?', [t.id]);
-    if (count >= t.max_players) return res.status(400).json({ error: 'Tournament is full' });
-    const [userRows] = await db.execute('SELECT balance FROM users WHERE id=?', [req.user.id]);
-    if (userRows[0].balance < t.buy_in) return res.status(400).json({ error: `Insufficient balance — buy-in is $${t.buy_in}` });
-    await db.execute('UPDATE users SET balance=balance-? WHERE id=?', [t.buy_in, req.user.id]);
-    await db.execute('UPDATE tournaments SET prize_pool=prize_pool+? WHERE id=?', [t.buy_in, t.id]);
-    await db.execute('INSERT INTO tournament_entries (tournament_id, user_id, starting_chips, current_chips) VALUES (?,?,1000,1000)', [t.id, req.user.id]);
-    const [upd] = await db.execute('SELECT balance FROM users WHERE id=?', [req.user.id]);
-    res.json({ success: true, startingChips: 1000, newBalance: upd[0].balance });
-  } catch (e) { console.error(e); res.status(500).json({ error: 'Server error' }); }
+    const tournamentId=Number(req.params.id);
+    if(!Number.isSafeInteger(tournamentId)||tournamentId<=0)throw clientError('Invalid tournament ID');
+    await conn.beginTransaction();
+    const [[user]]=await conn.execute('SELECT balance FROM users WHERE id=? FOR UPDATE',[req.user.id]);
+    if(!user)throw clientError('Account not found',404);
+    const [rows]=await conn.execute('SELECT * FROM tournaments WHERE id=? FOR UPDATE',[tournamentId]);
+    if(!rows.length)throw clientError('Tournament not found',404);
+    const t=rows[0];
+    if(t.status==='ended')throw clientError('Tournament has ended');
+    const [existing]=await conn.execute('SELECT id FROM tournament_entries WHERE tournament_id=? AND user_id=?',[t.id,req.user.id]);
+    if(existing.length)throw clientError('Already joined this tournament');
+    const [[{count}]]=await conn.execute('SELECT COUNT(*) AS count FROM tournament_entries WHERE tournament_id=?',[t.id]);
+    if(count>=t.max_players)throw clientError('Tournament is full');
+    if(user.balance<t.buy_in)throw clientError('Insufficient balance');
+    await conn.execute('INSERT INTO tournament_entries (tournament_id,user_id,starting_chips,current_chips) VALUES (?,?,1000,1000)',[t.id,req.user.id]);
+    await conn.execute('UPDATE users SET balance=balance-? WHERE id=?',[t.buy_in,req.user.id]);
+    await conn.execute('UPDATE tournaments SET prize_pool=prize_pool+? WHERE id=?',[t.buy_in,t.id]);
+    await conn.commit();
+    return res.json({success:true,startingChips:1000,newBalance:user.balance-t.buy_in});
+  }catch(e){await conn.rollback();return soloError(res,e);}
+  finally{conn.release();}
 });
-
-app.post('/api/tournaments/:id/game-result', auth, async (req, res) => {
-  try {
-    const { bet, payout } = req.body;
-    const [entryRows] = await db.execute('SELECT * FROM tournament_entries WHERE tournament_id=? AND user_id=?', [req.params.id, req.user.id]);
-    if (!entryRows.length) return res.status(404).json({ error: 'Not entered in this tournament' });
-    const [tRows] = await db.execute('SELECT status FROM tournaments WHERE id=?', [req.params.id]);
-    if (!tRows.length || tRows[0].status !== 'active') return res.status(400).json({ error: 'Tournament is not active' });
-    const entry = entryRows[0];
-    const newChips = Math.max(0, entry.current_chips - bet + payout);
-    await db.execute('UPDATE tournament_entries SET current_chips=?, hands_played=hands_played+1 WHERE tournament_id=? AND user_id=?', [newChips, req.params.id, req.user.id]);
-    const [[{rank}]] = await db.execute('SELECT COUNT(*)+1 as rank FROM tournament_entries WHERE tournament_id=? AND current_chips>?', [req.params.id, newChips]);
-    res.json({ currentChips: newChips, rank });
-  } catch (e) { console.error(e); res.status(500).json({ error: 'Server error' }); }
-});
+// Legacy client-supplied tournament results can no longer forge points.
+app.post('/api/tournaments/:id/game-result',auth,(req,res)=>
+  res.status(410).json({error:'Tournament points now come from verified solo rounds.'}));
 
 app.post('/api/admin/tournaments', adminAuth, async (req, res) => {
   try {
@@ -1231,7 +1482,8 @@ app.post('/api/use-referral', auth, async (req, res) => {
     if (!refRows.length) return res.status(400).json({ error: 'Invalid referral code' });
     if (refRows[0].id === req.user.id) return res.status(400).json({ error: 'Cannot use your own referral code' });
     const BONUS = 100;
-    await db.execute('UPDATE users SET balance=balance+?, referred_by=? WHERE id=?', [BONUS, refRows[0].id, req.user.id]);
+    const [claimed] = await db.execute('UPDATE users SET balance=balance+?, referred_by=? WHERE id=? AND referred_by IS NULL', [BONUS, refRows[0].id, req.user.id]);
+    if(claimed.affectedRows!==1) return res.status(400).json({ error: 'Referral already used' });
     await db.execute('UPDATE users SET balance=balance+? WHERE id=?', [BONUS, refRows[0].id]);
     const [upd] = await db.execute('SELECT balance FROM users WHERE id=?', [req.user.id]);
     res.json({ success: true, bonus: BONUS, newBalance: upd[0].balance, referrer: refRows[0].username });
@@ -1240,6 +1492,8 @@ app.post('/api/use-referral', auth, async (req, res) => {
 
 // ── SUBSCRIPTION / VIP PASS ($4.99/month) ────────────
 app.post('/api/subscribe', auth, async (req, res) => {
+  if (process.env.ENABLE_REAL_MONEY_PURCHASES !== 'true' || !stripe)
+    return res.status(503).json({ error: 'Paid subscriptions are disabled for free-play mode.' });
   if (!stripe) {
     await db.execute('UPDATE users SET balance=balance+500 WHERE id=?', [req.user.id]);
     const [upd] = await db.execute('SELECT balance FROM users WHERE id=?', [req.user.id]);
@@ -1295,37 +1549,36 @@ app.get('/api/cosmetics/shop', auth, async (req, res) => {
   } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
 
-app.post('/api/cosmetics/buy', auth, async (req, res) => {
-  try {
-    const { cosmeticId } = req.body;
-    const [items] = await db.execute('SELECT * FROM cosmetics WHERE id=?', [cosmeticId]);
-    if (!items.length) return res.status(404).json({ error: 'Item not found' });
-    const item = items[0];
-
-    // Handle perks differently — they update user columns instead of user_cosmetics
-    if (item.type === 'perk') {
-      const col = item.key_name === 'bonus_slot' ? 'has_bonus_slot'
-                : item.key_name === 'insurance_boost' ? 'has_insurance_boost'
-                : null;
-      if (!col) return res.status(400).json({ error: 'Unknown perk' });
-      const [userRows] = await db.execute(`SELECT ${col}, balance FROM users WHERE id=?`, [req.user.id]);
-      if (!userRows.length) return res.status(404).json({ error: 'Not found' });
-      if (userRows[0][col]) return res.status(400).json({ error: 'You already own this perk' });
-      if (userRows[0].balance < item.price) return res.status(400).json({ error: 'Insufficient balance' });
-      await db.execute(`UPDATE users SET ${col}=1, balance=balance-? WHERE id=?`, [item.price, req.user.id]);
-      const [updated] = await db.execute('SELECT balance FROM users WHERE id=?', [req.user.id]);
-      return res.json({ success: true, newBalance: updated[0].balance, item });
+app.post('/api/cosmetics/buy', auth, throttle(90, 10*60*1000), async(req,res)=>{
+  const conn=await db.getConnection();
+  try{
+    const itemId=Number(req.body.cosmeticId);
+    if(!Number.isSafeInteger(itemId)||itemId<1)throw clientError('Invalid item');
+    await conn.beginTransaction();
+    const [[user]]=await conn.execute('SELECT * FROM users WHERE id=? FOR UPDATE',[req.user.id]);
+    if(!user)throw clientError('Account not found',404);
+    const [items]=await conn.execute('SELECT * FROM cosmetics WHERE id=?',[itemId]);
+    if(!items.length)throw clientError('Item not found',404);
+    const item=items[0];
+    if(!Number.isSafeInteger(item.price)||item.price<0)throw clientError('Invalid item pricing');
+    if(user.balance<item.price)throw clientError('Insufficient chips');
+    if(item.type==='perk'){
+      const column=item.key_name==='bonus_slot'?'has_bonus_slot':
+                   item.key_name==='insurance_boost'?'has_insurance_boost':null;
+      if(!column)throw clientError('Unknown perk');
+      if(user[column])throw clientError('You already own this perk');
+      await conn.execute(`UPDATE users SET ${column}=1, balance=balance-? WHERE id=?`,[item.price,user.id]);
+    }else{
+      const [owned]=await conn.execute('SELECT id FROM user_cosmetics WHERE user_id=? AND cosmetic_id=?',
+        [req.user.id,itemId]);
+      if(owned.length)throw clientError('Already owned');
+      await conn.execute('INSERT INTO user_cosmetics (user_id,cosmetic_id) VALUES (?,?)',[user.id,itemId]);
+      await conn.execute('UPDATE users SET balance=balance-? WHERE id=?',[item.price,user.id]);
     }
-
-    const [owned] = await db.execute('SELECT id FROM user_cosmetics WHERE user_id=? AND cosmetic_id=?', [req.user.id, cosmeticId]);
-    if (owned.length) return res.status(400).json({ error: 'Already owned' });
-    const [userRows] = await db.execute('SELECT balance FROM users WHERE id=?', [req.user.id]);
-    if (userRows[0].balance < item.price) return res.status(400).json({ error: 'Insufficient balance' });
-    await db.execute('UPDATE users SET balance=balance-? WHERE id=?', [item.price, req.user.id]);
-    await db.execute('INSERT INTO user_cosmetics (user_id, cosmetic_id) VALUES (?,?)', [req.user.id, cosmeticId]);
-    const [upd] = await db.execute('SELECT balance FROM users WHERE id=?', [req.user.id]);
-    res.json({ success: true, newBalance: upd[0].balance, item });
-  } catch (e) { console.error(e); res.status(500).json({ error: 'Server error' }); }
+    await conn.commit();
+    return res.json({success:true,newBalance:user.balance-item.price,item});
+  }catch(e){await conn.rollback();return soloError(res,e);}
+  finally{conn.release();}
 });
 
 app.post('/api/cosmetics/equip', auth, async (req, res) => {
