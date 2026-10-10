@@ -389,6 +389,30 @@ async function connectDB() {
     )
   `);
 
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS solo_results (
+      round_id VARCHAR(36) PRIMARY KEY,
+      user_id INT NOT NULL,
+      result VARCHAR(20) NOT NULL,
+      bet INT NOT NULL,
+      payout INT NOT NULL,
+      net INT NOT NULL,
+      played_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      INDEX ix_season (played_at, user_id),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `);
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS daily_challenge_claims (
+      user_id INT NOT NULL,
+      day DATE NOT NULL,
+      challenge_key VARCHAR(30) NOT NULL,
+      claimed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (user_id,day,challenge_key),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `);
+
   // ALTER TABLE for existing deployments — safe to run every boot
   const alterColumns = [
     "ALTER TABLE users ADD COLUMN has_bonus_slot      TINYINT(1)  NOT NULL DEFAULT 0    AFTER verified_at",
@@ -964,6 +988,10 @@ async function settleSolo(conn, userId, player, game) {
     VALUES (?,?,?,?,?,?,?)`,
     [userId,outcome.result,outcome.stake,outcome.payout,updatedBalance,
       outcome.playerHand,outcome.dealerHand]);
+  // Only signed-off server-side rounds count toward rewards and ranked seasons.
+  await conn.execute(`INSERT INTO solo_results (round_id,user_id,result,bet,payout,net)
+     VALUES (?,?,?,?,?,?)`,
+    [game.id,userId,outcome.result,outcome.stake,outcome.payout,outcome.net]);
   return updatedBalance;
 }
 function soloError(res,err) {
@@ -1098,6 +1126,75 @@ app.get('/api/leaderboard', async (req, res) => {
       equippedNameColor: u.equipped_name_color || null,
     })));
   } catch { res.status(500).json({ error: 'Server error' }); }
+});
+
+// ── VERIFIED SEASONS + DAILY CHALLENGES ────────────────
+const CHALLENGES=[
+  {key:'play_3',label:'Play 3 hands',target:3,reward:100},
+  {key:'win_2',label:'Win 2 hands',target:2,reward:125},
+  {key:'blackjack_1',label:'Get a natural Blackjack',target:1,reward:250},
+];
+async function challengeProgress(conn,userId) {
+  const [[stats]]=await conn.execute(`SELECT COUNT(*) as hands,
+    COALESCE(SUM(CASE WHEN result IN ('win','blackjack','dealer_bust','double_win','split_win') THEN 1 ELSE 0 END),0) as wins,
+    COALESCE(SUM(CASE WHEN result='blackjack' THEN 1 ELSE 0 END),0) as naturals
+    FROM solo_results WHERE user_id=? AND DATE(played_at)=UTC_DATE()`,[userId]);
+  const [claims]=await conn.execute(
+    'SELECT challenge_key FROM daily_challenge_claims WHERE user_id=? AND day=UTC_DATE()',[userId]);
+  const claimed=new Set(claims.map(c=>c.challenge_key));
+  return CHALLENGES.map(c=>({
+    ...c, progress:Math.min(c.target,Number(c.key==='play_3'?stats.hands:
+      c.key==='win_2'?stats.wins:stats.naturals)),claimed:claimed.has(c.key),
+  }));
+}
+app.get('/api/challenges',auth,async(req,res)=>{
+  try {return res.json({day:new Date().toISOString().slice(0,10),
+    challenges:await challengeProgress(db,req.user.id)});
+  }catch(e){console.error('Challenges:',e.message);res.status(500).json({error:'Unable to load challenges'});}
+});
+app.post('/api/challenges/claim',auth,throttle(30,10*60*1000),async(req,res)=>{
+  const conn=await db.getConnection();
+  try{
+    const key=req.body.key;
+    const challenge=CHALLENGES.find(c=>c.key===key);
+    if(!challenge)throw clientError('Unknown challenge');
+    await conn.beginTransaction();
+    const [[user]]=await conn.execute('SELECT balance FROM users WHERE id=? FOR UPDATE',[req.user.id]);
+    if(!user)throw clientError('Account not found',404);
+    const challenges=await challengeProgress(conn,req.user.id);
+    const current=challenges.find(c=>c.key===key);
+    if(current.claimed)throw clientError('Already claimed');
+    if(current.progress<challenge.target)throw clientError('Complete the challenge first');
+    const [insert]=await conn.execute(
+      'INSERT IGNORE INTO daily_challenge_claims (user_id,day,challenge_key) VALUES (?,UTC_DATE(),?)',
+      [req.user.id,key]);
+    if(insert.affectedRows!==1)throw clientError('Already claimed');
+    await conn.execute('UPDATE users SET balance=balance+? WHERE id=?',[challenge.reward,req.user.id]);
+    await conn.commit();
+    return res.json({success:true,added:challenge.reward,balance:user.balance+challenge.reward});
+  }catch(e){await conn.rollback();return soloError(res,e);}finally{conn.release();}
+});
+app.get('/api/leaderboard/season',async(req,res)=>{
+  try {
+    const [rows]=await db.execute(`SELECT u.username,u.display_name,u.avatar,u.vip_tier,
+      u.equipped_badge,u.equipped_name_color,u.balance,
+      COUNT(r.round_id) as total_hands,COALESCE(SUM(r.net),0) as points,
+      COALESCE(SUM(CASE WHEN r.result IN ('win','dealer_bust','blackjack','double_win','split_win')
+        THEN 1 ELSE 0 END),0) as wins,
+      COALESCE(SUM(CASE WHEN r.result IN ('lose','bust') THEN 1 ELSE 0 END),0) as losses,
+      COALESCE(SUM(CASE WHEN r.result='blackjack' THEN 1 ELSE 0 END),0) as blackjacks
+    FROM solo_results r JOIN users u ON r.user_id=u.id
+    WHERE r.played_at >= DATE_FORMAT(UTC_TIMESTAMP(),'%Y-%m-01')
+    GROUP BY u.id,u.username,u.display_name,u.avatar,u.vip_tier,
+             u.equipped_badge,u.equipped_name_color,u.balance
+    ORDER BY points DESC,wins DESC LIMIT 10`);
+    res.json(rows.map((r,i)=>({rank:i+1,username:r.username,displayName:r.display_name||r.username,
+      avatar:r.avatar,balance:r.balance,vipTier:r.vip_tier,equippedBadge:r.equipped_badge,
+      equippedNameColor:r.equipped_name_color,points:Number(r.points),
+      totalHands:Number(r.total_hands),wins:Number(r.wins),losses:Number(r.losses),
+      blackjacks:Number(r.blackjacks),winRate:Number(r.total_hands)?
+        Math.round(Number(r.wins)/Number(r.total_hands)*100):0})));
+  }catch(e){console.error('Season ranking:',e.message);res.status(500).json({error:'Unable to load season'});}
 });
 
 // ── MULTIPLAYER (unchanged) ───────────────────────────
