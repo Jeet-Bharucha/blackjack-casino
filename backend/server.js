@@ -516,7 +516,7 @@ app.post('/api/register', async (req, res) => {
     if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' });
 
     // Self-reported age gate: 21+ only. This does not verify identity.
-    if (typeof dateOfBirth !== 'string' || !/^\\d{4}-\\d{2}-\\d{2}$/.test(dateOfBirth)) {
+    if (typeof dateOfBirth !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(dateOfBirth)) {
       return res.status(400).json({ error: 'Enter a valid date of birth (YYYY-MM-DD)' });
     }
     const [year, month, day] = dateOfBirth.split('-').map(Number);
