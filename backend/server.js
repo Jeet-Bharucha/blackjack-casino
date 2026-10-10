@@ -1528,37 +1528,36 @@ app.get('/api/cosmetics/shop', auth, async (req, res) => {
   } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
 
-app.post('/api/cosmetics/buy', auth, async (req, res) => {
-  try {
-    const { cosmeticId } = req.body;
-    const [items] = await db.execute('SELECT * FROM cosmetics WHERE id=?', [cosmeticId]);
-    if (!items.length) return res.status(404).json({ error: 'Item not found' });
-    const item = items[0];
-
-    // Handle perks differently — they update user columns instead of user_cosmetics
-    if (item.type === 'perk') {
-      const col = item.key_name === 'bonus_slot' ? 'has_bonus_slot'
-                : item.key_name === 'insurance_boost' ? 'has_insurance_boost'
-                : null;
-      if (!col) return res.status(400).json({ error: 'Unknown perk' });
-      const [userRows] = await db.execute(`SELECT ${col}, balance FROM users WHERE id=?`, [req.user.id]);
-      if (!userRows.length) return res.status(404).json({ error: 'Not found' });
-      if (userRows[0][col]) return res.status(400).json({ error: 'You already own this perk' });
-      if (userRows[0].balance < item.price) return res.status(400).json({ error: 'Insufficient balance' });
-      await db.execute(`UPDATE users SET ${col}=1, balance=balance-? WHERE id=?`, [item.price, req.user.id]);
-      const [updated] = await db.execute('SELECT balance FROM users WHERE id=?', [req.user.id]);
-      return res.json({ success: true, newBalance: updated[0].balance, item });
+app.post('/api/cosmetics/buy', auth, throttle(90, 10*60*1000), async(req,res)=>{
+  const conn=await db.getConnection();
+  try{
+    const itemId=Number(req.body.cosmeticId);
+    if(!Number.isSafeInteger(itemId)||itemId<1)throw clientError('Invalid item');
+    await conn.beginTransaction();
+    const [[user]]=await conn.execute('SELECT * FROM users WHERE id=? FOR UPDATE',[req.user.id]);
+    if(!user)throw clientError('Account not found',404);
+    const [items]=await conn.execute('SELECT * FROM cosmetics WHERE id=?',[itemId]);
+    if(!items.length)throw clientError('Item not found',404);
+    const item=items[0];
+    if(!Number.isSafeInteger(item.price)||item.price<0)throw clientError('Invalid item pricing');
+    if(user.balance<item.price)throw clientError('Insufficient chips');
+    if(item.type==='perk'){
+      const column=item.key_name==='bonus_slot'?'has_bonus_slot':
+                   item.key_name==='insurance_boost'?'has_insurance_boost':null;
+      if(!column)throw clientError('Unknown perk');
+      if(user[column])throw clientError('You already own this perk');
+      await conn.execute(`UPDATE users SET ${column}=1, balance=balance-? WHERE id=?`,[item.price,user.id]);
+    }else{
+      const [owned]=await conn.execute('SELECT id FROM user_cosmetics WHERE user_id=? AND cosmetic_id=?',
+        [req.user.id,itemId]);
+      if(owned.length)throw clientError('Already owned');
+      await conn.execute('INSERT INTO user_cosmetics (user_id,cosmetic_id) VALUES (?,?)',[user.id,itemId]);
+      await conn.execute('UPDATE users SET balance=balance-? WHERE id=?',[item.price,user.id]);
     }
-
-    const [owned] = await db.execute('SELECT id FROM user_cosmetics WHERE user_id=? AND cosmetic_id=?', [req.user.id, cosmeticId]);
-    if (owned.length) return res.status(400).json({ error: 'Already owned' });
-    const [userRows] = await db.execute('SELECT balance FROM users WHERE id=?', [req.user.id]);
-    if (userRows[0].balance < item.price) return res.status(400).json({ error: 'Insufficient balance' });
-    await db.execute('UPDATE users SET balance=balance-? WHERE id=?', [item.price, req.user.id]);
-    await db.execute('INSERT INTO user_cosmetics (user_id, cosmetic_id) VALUES (?,?)', [req.user.id, cosmeticId]);
-    const [upd] = await db.execute('SELECT balance FROM users WHERE id=?', [req.user.id]);
-    res.json({ success: true, newBalance: upd[0].balance, item });
-  } catch (e) { console.error(e); res.status(500).json({ error: 'Server error' }); }
+    await conn.commit();
+    return res.json({success:true,newBalance:user.balance-item.price,item});
+  }catch(e){await conn.rollback();return soloError(res,e);}
+  finally{conn.release();}
 });
 
 app.post('/api/cosmetics/equip', auth, async (req, res) => {
