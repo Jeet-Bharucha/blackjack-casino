@@ -357,7 +357,7 @@
       <div class="chip chip-25"  onclick="placeBet(25)">$25</div>
       <div class="chip chip-100" onclick="placeBet(100)">$100</div>
       <button class="btn btn-clear" onclick="clearBet()">Clear</button>
-      <button class="btn btn-buy-chips" onclick="openBuyModal()">+ Chips</button>
+      <button class="btn btn-buy-chips" type="button" onclick="showToast('Real-money purchases are disabled. Earn free chips with the daily bonus!')">Free Play ♠</button>
     </div>
     <div class="action-row">
       <button class="btn btn-deal"   id="dealBtn"   onclick="startDeal()">Deal</button>
@@ -1061,8 +1061,7 @@ function nextRound(){
   document.getElementById('resultPopup').classList.remove('show');
   setTimeout(()=>document.getElementById('resultPopup').classList.add('hidden'),400);
   if(balance===0){
-    document.getElementById('buyModalSub').textContent="You're out of chips — add more to keep playing!";
-    document.getElementById('buyChipsModal').classList.remove('hidden');
+    showToast("Out of chips? Come back for a free daily bonus!");
     return;
   }
   currentBet=0; gamePhase='bet'; updateUI(); enableBetting(true);
