@@ -301,7 +301,9 @@ const inviteFromUrl = new URLSearchParams(location.search).get('invite');
 const socket = io('https://blackjack-casino-nob6.onrender.com');
 socket.on('connect',()=>{
   socket.emit('auth', { token });
-  if(inviteFromUrl&&!currentTableId)socket.emit('join_private',{inviteCode:inviteFromUrl,token});
+  if(currentPrivateInvite)socket.emit('join_private',{inviteCode:currentPrivateInvite,token});
+  else if(currentTableId)socket.emit('join_table',{tableId:currentTableId,token});
+  else if(inviteFromUrl)socket.emit('join_private',{inviteCode:inviteFromUrl,token});
 });
 
 socket.on('table_list', tables => renderLobby(tables));
