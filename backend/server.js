@@ -1108,10 +1108,12 @@ function buildShoe(n=6){ const s=[]; for(let d=0;d<n;d++) for(const su of SUITS)
 function cardValue(r){ if(['J','Q','K'].includes(r)) return 10; if(r==='A') return 11; return parseInt(r); }
 function handTotal(cards){ let t=0,a=0; for(const c of cards){t+=cardValue(c.rank);if(c.rank==='A')a++;} while(t>21&&a>0){t-=10;a--;} return t; }
 function drawCard(shoe){ if(shoe.length<52){const f=buildShoe();shoe.push(...f);} return shoe.pop(); }
-function createTable(name){ return {id:Date.now().toString(36),name,seats:[null,null,null,null,null],phase:'waiting',shoe:buildShoe(),dealerCards:[],currentSeat:-1,betTimer:null,turnTimer:null,chat:[]}; }
+function createTable(name,isPrivate=false){ return {id:crypto.randomBytes(8).toString('hex'),name,
+  isPrivate,inviteCode:isPrivate?crypto.randomBytes(12).toString('hex'):null,
+  seats:[null,null,null,null,null],phase:'waiting',shoe:buildShoe(),dealerCards:[],currentSeat:-1,betTimer:null,turnTimer:null,chat:[]}; }
 
-function tablePublicState(t){ return {id:t.id,name:t.name,phase:t.phase,currentSeat:t.currentSeat,dealerCards:t.phase==='playing'?[t.dealerCards[0],{rank:'?',suit:'?'}]:t.dealerCards,seats:t.seats.map(s=>s?{username:s.username,displayName:s.displayName||s.username,avatar:s.avatar,vipTier:s.vipTier||'Bronze',bet:s.bet,hasBet:s.hasBet,done:s.done,hands:s.hands,balance:s.balance}:null),chat:t.chat.slice(-50),shoeSize:t.shoe.length}; }
-function getTableList(){ return Array.from(tables.values()).map(t=>({id:t.id,name:t.name,phase:t.phase,playerCount:t.seats.filter(Boolean).length})); }
+function tablePublicState(t){ return {id:t.id,name:t.name,phase:t.phase,isPrivate:t.isPrivate,inviteCode:t.inviteCode,currentSeat:t.currentSeat,dealerCards:t.phase==='playing'?[t.dealerCards[0],{rank:'?',suit:'?'}]:t.dealerCards,seats:t.seats.map(s=>s?{username:s.username,displayName:s.displayName||s.username,avatar:s.avatar,vipTier:s.vipTier||'Bronze',bet:s.bet,hasBet:s.hasBet,ready:s.ready,done:s.done,hands:s.hands,balance:s.balance}:null),chat:t.chat.slice(-50),shoeSize:t.shoe.length}; }
+function getTableList(){ return Array.from(tables.values()).filter(t=>!t.isPrivate).map(t=>({id:t.id,name:t.name,phase:t.phase,playerCount:t.seats.filter(Boolean).length})); }
 function broadcastTableList(){ io.emit('table_list',getTableList()); }
 function broadcastTable(t){ io.to(t.id).emit('table_update',tablePublicState(t)); }
 
@@ -1123,10 +1125,12 @@ function startBetTimer(table){
 function clearTimers(t){ if(t.betTimer){clearInterval(t.betTimer);t.betTimer=null;} if(t.turnTimer){clearInterval(t.turnTimer);t.turnTimer=null;} }
 
 function dealRound(table){
-  const active=table.seats.filter(s=>s&&s.hasBet);
-  if(!active.length){table.phase='waiting';broadcastTable(table);return;}
+  const active=table.seats.filter(s=>s&&s.hasBet&&Number.isSafeInteger(s.bet)&&s.bet<=s.balance);
+  if(!active.length){table.phase=table.isPrivate?'waiting':'betting';broadcastTable(table);if(!table.isPrivate)startBetTimer(table);return;}
+  // Private tables use temporary practice chips; never write them to TiDB.
+  for(const seat of active)seat.balance-=seat.bet;
   table.phase='dealing'; table.dealerCards=[];
-  for(const seat of table.seats){ if(!seat||!seat.hasBet) continue; seat.hands=[{cards:[drawCard(table.shoe),drawCard(table.shoe)],bet:seat.bet,doubled:false,done:false}]; seat.activeHand=0; seat.done=false; }
+  for(const seat of table.seats){ if(!seat||!active.includes(seat)) continue; seat.hands=[{cards:[drawCard(table.shoe),drawCard(table.shoe)],bet:seat.bet,doubled:false,done:false}]; seat.activeHand=0; seat.done=false; }
   table.dealerCards=[drawCard(table.shoe),drawCard(table.shoe)]; table.phase='playing'; broadcastTable(table);
   const dTotal=handTotal(table.dealerCards);
   if(dTotal===21){io.to(table.id).emit('game_message',{text:'Dealer has Blackjack!',type:'warn'}); setTimeout(()=>endRound(table),1000); return;}
@@ -1171,36 +1175,71 @@ async function endRound(table){
     }
     seat.balance=Math.max(0,seat.balance+totalPayout);
     results.push({seatIndex:i,username:seat.username,handResults,newBalance:seat.balance});
-    if(seat.userId&&db){try{await db.execute('UPDATE users SET balance=?,total_hands=total_hands+1 WHERE id=?',[seat.balance,seat.userId]);}catch(e){}}
+    // Practice-table balances stay in memory; trusted solo results alone affect rankings.
   }
   table.phase='results'; broadcastTable(table);
   io.to(table.id).emit('round_results',{results,dealerTotal:dTotal,dealerCards:table.dealerCards});
   setTimeout(()=>{
-    for(const seat of table.seats){if(!seat) continue; seat.bet=0;seat.hasBet=false;seat.hands=[];seat.done=false;}
-    table.dealerCards=[]; table.phase=table.seats.some(Boolean)?'betting':'waiting'; broadcastTable(table);
+    for(const seat of table.seats){if(!seat) continue; seat.bet=0;seat.hasBet=false;seat.hands=[];seat.done=false;seat.ready=false;}
+    table.dealerCards=[]; table.phase=table.isPrivate?'waiting':(table.seats.some(Boolean)?'betting':'waiting'); broadcastTable(table);
     if(table.phase==='betting') startBetTimer(table); broadcastTableList();
   },6000);
 }
 
+// Private invitations cannot be discovered from the public table list.
+async function joinSocketTable(socket,tableId,token,inviteCode){
+  const u=verifyToken(token); if(!u)return socket.emit('error_msg','Not authenticated');
+  if(socketToTable.has(socket.id))return socket.emit('error_msg','Already at a table');
+  const table=tables.get(tableId); if(!table)return socket.emit('error_msg','Table not found');
+  if(table.isPrivate && inviteCode!==table.inviteCode)return socket.emit('error_msg','Invite code required');
+  const freeSeat=table.seats.findIndex(s=>s===null);if(freeSeat===-1)return socket.emit('error_msg','Table is full');
+  if(table.seats.some(s=>s&&s.userId===u.id))return socket.emit('error_msg','Already seated at this table');
+  let name=u.username,avatar=null;
+  try{
+    const [rows]=await db.execute('SELECT username,display_name,avatar,is_banned FROM users WHERE id=?',[u.id]);
+    if(!rows.length||rows[0].is_banned)return socket.emit('error_msg','Account not available');
+    name=rows[0].display_name||u.username;
+    avatar=rows[0].avatar;
+  }catch(e){return socket.emit('error_msg','Unable to load account');}
+  table.seats[freeSeat]={socketId:socket.id,userId:u.id,username:u.username,displayName:name,avatar,
+    vipTier:'Bronze',balance:1000,bet:0,hasBet:false,ready:false,hands:[],activeHand:0,done:false};
+  socketToTable.set(socket.id,table.id);socketToUser.set(socket.id,u);
+  socket.join(table.id);
+  socket.emit('joined_table',{tableId:table.id,seatIndex:freeSeat,balance:1000,
+    isPrivate:table.isPrivate,inviteCode:table.isPrivate?table.inviteCode:null});
+  io.to(table.id).emit('game_message',{text:name+' joined',type:'join'});
+  if(!table.isPrivate && table.phase==='waiting'){table.phase='betting';startBetTimer(table);}
+  broadcastTable(table);broadcastTableList();
+}
 io.on('connection',socket=>{
   socket.emit('table_list',getTableList());
-  socket.on('auth',({token})=>{ const u=verifyToken(token); if(u) socketToUser.set(socket.id,u); });
+  socket.on('auth',({token}={})=>{const u=verifyToken(token);if(u)socketToUser.set(socket.id,u);});
   socket.on('get_tables',()=>socket.emit('table_list',getTableList()));
-  socket.on('create_table',({name,token})=>{ const u=verifyToken(token); if(!u) return socket.emit('error_msg','Not authenticated'); if(socketToTable.has(socket.id)) return; const t=createTable(name||`${u.username}'s Table`); tables.set(t.id,t); broadcastTableList(); socket.emit('table_created',{tableId:t.id}); });
-  socket.on('join_table',async({tableId,token})=>{
-    const u=verifyToken(token); if(!u) return socket.emit('error_msg','Not authenticated');
-    if(socketToTable.has(socket.id)) return socket.emit('error_msg','Already at a table');
-    const table=tables.get(tableId); if(!table) return socket.emit('error_msg','Table not found');
-    const freeSeat=table.seats.findIndex(s=>s===null); if(freeSeat===-1) return socket.emit('error_msg','Table is full');
-    let balance=500,vipTier='Bronze',displayName=u.username,avatar=null;
-    if(db){try{const [rows]=await db.execute('SELECT balance,vip_tier,display_name,avatar FROM users WHERE id=?',[u.id]); if(rows.length){balance=rows[0].balance;vipTier=rows[0].vip_tier;displayName=rows[0].display_name||u.username;avatar=rows[0].avatar;}}catch{}}
-    table.seats[freeSeat]={socketId:socket.id,userId:u.id,username:u.username,displayName,avatar,vipTier,balance,bet:0,hasBet:false,hands:[],activeHand:0,done:false};
-    socketToTable.set(socket.id,tableId); socketToUser.set(socket.id,u);
-    socket.join(tableId); socket.emit('joined_table',{tableId,seatIndex:freeSeat,balance});
-    io.to(tableId).emit('game_message',{text:`${displayName} joined`,type:'join'}); broadcastTable(table); broadcastTableList();
-    if(table.phase==='waiting'&&table.seats.some(Boolean)){table.phase='betting';startBetTimer(table);}
+  socket.on('create_table',({name,token,isPrivate}={})=>{
+    const u=verifyToken(token); if(!u)return socket.emit('error_msg','Not authenticated');
+    if(socketToTable.has(socket.id))return socket.emit('error_msg','Already at a table');
+    const safeName=typeof name==='string' ? name.trim().slice(0,36) : '';
+    const t=createTable(safeName||u.username+"'s Table",isPrivate===true);
+    tables.set(t.id,t);broadcastTableList();
+    socket.emit('table_created',{tableId:t.id,inviteCode:t.inviteCode});
   });
-  socket.on('place_bet',({amount})=>{ const tableId=socketToTable.get(socket.id); if(!tableId) return; const table=tables.get(tableId); if(!table||table.phase!=='betting') return; const seat=table.seats.find(s=>s?.socketId===socket.id); if(!seat) return; if(amount<1||amount>seat.balance) return socket.emit('error_msg','Invalid bet'); seat.bet=amount; seat.hasBet=true; io.to(tableId).emit('game_message',{text:`${seat.displayName||seat.username} bet $${amount}`,type:'bet'}); broadcastTable(table); });
+  socket.on('join_table',({tableId,token,inviteCode}={})=>{
+    joinSocketTable(socket,tableId,token,inviteCode);
+  });
+  socket.on('join_private',({inviteCode,token}={})=>{
+    const code=typeof inviteCode==='string'?inviteCode.trim().toLowerCase():'';
+    const table=Array.from(tables.values()).find(t=>t.isPrivate&&t.inviteCode===code);
+    if(!table)return socket.emit('error_msg','Invite is invalid or the table has closed');
+    joinSocketTable(socket,table.id,token,code);
+  });
+  socket.on('ready_player',()=>{
+    const t=tables.get(socketToTable.get(socket.id));
+    if(!t||!t.isPrivate||t.phase!=='waiting')return;
+    const seat=t.seats.find(s=>s?.socketId===socket.id);if(!seat)return;
+    seat.ready=true;broadcastTable(t);
+    if(t.seats.filter(s=>s?.ready).length>=2){t.phase='betting';startBetTimer(t);broadcastTable(t);}
+  });
+  socket.on('place_bet',({amount})=>{ const tableId=socketToTable.get(socket.id); if(!tableId) return; const table=tables.get(tableId); if(!table||table.phase!=='betting') return; const seat=table.seats.find(s=>s?.socketId===socket.id); if(!seat) return; if(!Number.isSafeInteger(amount)||amount<1||amount>seat.balance) return socket.emit('error_msg','Invalid bet'); seat.bet=amount; seat.hasBet=true; io.to(tableId).emit('game_message',{text:`${seat.displayName||seat.username} bet $${amount}`,type:'bet'}); broadcastTable(table); });
   socket.on('mp_hit',()=>{ const tableId=socketToTable.get(socket.id); if(!tableId) return; const table=tables.get(tableId); if(!table||table.phase!=='playing') return; const si=table.seats.findIndex(s=>s?.socketId===socket.id); if(si!==table.currentSeat) return; const seat=table.seats[si]; const hand=seat.hands[seat.activeHand]; hand.cards.push(drawCard(table.shoe)); const total=handTotal(hand.cards); broadcastTable(table); if(total>=21){hand.done=true;if(seat.activeHand+1<seat.hands.length){seat.activeHand++;}else{seat.done=true;clearTimers(table);nextPlayerTurn(table,si+1);}} });
   socket.on('mp_stand',()=>{ const tableId=socketToTable.get(socket.id); if(!tableId) return; const table=tables.get(tableId); if(!table||table.phase!=='playing') return; const si=table.seats.findIndex(s=>s?.socketId===socket.id); if(si!==table.currentSeat) return; const seat=table.seats[si]; seat.hands[seat.activeHand].done=true; clearTimers(table); if(seat.activeHand+1<seat.hands.length){seat.activeHand++;nextPlayerTurn(table,si);}else{seat.done=true;nextPlayerTurn(table,si+1);} });
   socket.on('mp_double',()=>{ const tableId=socketToTable.get(socket.id); if(!tableId) return; const table=tables.get(tableId); if(!table||table.phase!=='playing') return; const si=table.seats.findIndex(s=>s?.socketId===socket.id); if(si!==table.currentSeat) return; const seat=table.seats[si]; if(seat.balance<seat.bet) return socket.emit('error_msg','Insufficient balance'); const hand=seat.hands[seat.activeHand]; if(hand.cards.length!==2) return; seat.balance-=hand.bet; hand.bet*=2; hand.doubled=true; hand.cards.push(drawCard(table.shoe)); hand.done=true; seat.done=true; broadcastTable(table); clearTimers(table); nextPlayerTurn(table,si+1); });
