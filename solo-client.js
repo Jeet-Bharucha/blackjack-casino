@@ -56,6 +56,7 @@
     badge.style.display='';
   }
   function updateTable(st) {
+    const previous=lastState?.roundId===st.roundId ? lastState : null;
     lastState=st;
     balance=st.balance;
     if(!st.active){gamePhase='bet';updateUI();refreshControls();return;}
@@ -66,6 +67,15 @@
     gamePhase=st.phase==='finished'?'done':'player';
     updateUI();
     renderPlayerHands();
+    document.querySelectorAll('#handsRow .hand-group').forEach((group,i)=>{
+      const oldCount=previous?.hands[i]?.cards.length||0;
+      group.querySelectorAll('.card-wrapper').forEach((card,j)=>{
+        if(j>=oldCount){
+          card.classList.add('solo-card-appear');
+          card.style.animationDelay=(j-oldCount)*100+'ms';
+        }
+      });
+    });
     renderDealer(st);
     document.getElementById('insuranceModal').classList.toggle('hidden',st.phase!=='insurance');
     if(st.phase==='finished'&&st.outcome){
