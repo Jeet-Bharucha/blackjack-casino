@@ -673,11 +673,6 @@ async function loadUser() {
     const res = await fetch(`${API}/me`,{headers:{Authorization:'Bearer '+token}});
     if (res.status===401){logout();return;}
     const data = await res.json();
-    // Block access if not verified
-    if (data.verifyStatus && data.verifyStatus !== 'verified') {
-      window.location.href = 'verify-age.html';
-      return;
-    }
     userData=data; balance=data.balance;
     updateUI(); updateStatsPanel(data.stats);
     const displayName = data.displayName || data.username;
