@@ -87,7 +87,7 @@ if (!stripe) console.warn('⚠️  Stripe not configured — set STRIPE_SECRET_K
 
 app.set('trust proxy', 1);
 const allowedOrigins = (process.env.FRONTEND_ORIGINS ||
-  'https://blackjack-casino-inky.vercel.app,https://blackjack-casino-nob6.onrender.com')
+  'https://blackjack-casino-inky.vercel.app,https://blackjack-casino-jeet-bharucha-s-projects.vercel.app,https://blackjack-casino-git-master-jeet-bharucha-s-projects.vercel.app,https://blackjack-casino-nob6.onrender.com')
   .split(',').map(x => x.trim()).filter(Boolean);
 app.use(cors({ origin(origin, cb) {
   return cb(null, !origin || allowedOrigins.includes(origin));
