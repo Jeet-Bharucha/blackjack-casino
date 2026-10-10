@@ -102,22 +102,8 @@ select option{background:#1a1a2e;color:#fff;}
     <div class="banner-icon">✅</div>
     <div class="banner-text">
       <div class="banner-title" id="bannerTitle">Account is in good standing</div>
-      <div class="banner-sub" id="bannerSub">No active restrictions. Gamble responsibly.</div>
+      <div class="banner-sub" id="bannerSub">No active restrictions. This game uses virtual chips only.</div>
     </div>
-  </div>
-
-  <!-- Deposit Limit -->
-  <div class="section">
-    <div class="section-title">💰 Deposit Limit</div>
-    <div class="section-desc">Set a maximum amount you can purchase in chips per month. Once set, the limit can only be lowered — it will take 7 days to raise or remove a limit, to protect you.</div>
-    <div class="form-row">
-      <div class="form-group">
-        <label>MONTHLY LIMIT (in chips, leave blank to remove)</label>
-        <input type="number" id="limitInput" placeholder="e.g. 1000" min="0" step="100"/>
-      </div>
-      <button class="btn btn-gold" onclick="saveDepositLimit()">Set Limit</button>
-    </div>
-    <div class="current-limit" id="currentLimitText">Current limit: <span>None</span></div>
   </div>
 
   <!-- Self-Exclusion -->
@@ -147,7 +133,7 @@ select option{background:#1a1a2e;color:#fff;}
     </div>
   </div>
 
-  <!-- VIP membership information is not shown while paid purchases are disabled. -->
+  <!-- Virtual chips are earned by playing and daily bonuses; no money is collected. -->
   <!-- Referral -->
   <div class="section">
     <div class="section-title">🎁 Referral Program</div>
@@ -223,11 +209,6 @@ async function loadSettings() {
   const data = await api('GET', '/responsible/settings');
   if (data.error) return;
 
-  // Update limit display
-  const limitText = document.getElementById('currentLimitText');
-  limitText.innerHTML = `Current limit: <span>${data.depositLimit ? `$${data.depositLimit.toLocaleString()} chips/month` : 'None'}</span>`;
-  if (data.depositLimit) document.getElementById('limitInput').value = data.depositLimit;
-
   // Exclusion status
   if (data.isExcluded) {
     document.getElementById('statusBanner').className = 'status-banner excluded';
@@ -237,16 +218,6 @@ async function loadSettings() {
     document.getElementById('excludedUntil').textContent = new Date(data.selfExcludedUntil).toLocaleDateString(undefined, { year:'numeric', month:'long', day:'numeric' });
     document.querySelectorAll('.period-btn').forEach(b => b.style.opacity = '0.3');
   }
-}
-
-async function saveDepositLimit() {
-  const val = document.getElementById('limitInput').value;
-  const limit = val ? parseInt(val) : null;
-  const data = await api('POST', '/responsible/deposit-limit', { limit });
-  if (data.error) { showToast('❌ ' + data.error, false); return; }
-  showToast(`✅ Deposit limit ${limit ? `set to $${limit.toLocaleString()}` : 'removed'}`);
-  const limitText = document.getElementById('currentLimitText');
-  limitText.innerHTML = `Current limit: <span>${limit ? `$${limit.toLocaleString()} chips/month` : 'None'}</span>`;
 }
 
 function selectPeriod(days, btn) {
@@ -276,13 +247,6 @@ async function confirmExclusion() {
 
   showToast('🔒 Self-exclusion activated. You will receive a confirmation email.');
   setTimeout(() => window.location.reload(), 2500);
-}
-
-async function subscribe() {
-  const data = await api('POST', '/subscribe');
-  if (data.error) { showToast('❌ ' + data.error, false); return; }
-  if (data.devMode) { showToast('✅ ' + data.message); return; }
-  if (data.checkoutUrl) window.location.href = data.checkoutUrl;
 }
 
 async function loadReferral() {
