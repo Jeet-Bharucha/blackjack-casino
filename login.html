@@ -313,8 +313,8 @@
       if (!res.ok) { errEl.textContent = data.error; return; }
       localStorage.setItem('bj_token', data.token);
       localStorage.setItem('bj_user', JSON.stringify(data.user));
-      // Redirect to age verification first
-      window.location.href = data.requiresVerification ? 'verify-age.html' : 'blackjack.html';
+      // Date of birth is checked at registration; no ID upload is required.
+      window.location.href = 'blackjack.html';
     } catch { errEl.textContent = 'Cannot connect to server. Is it running?'; }
     finally { btn.disabled = false; btn.textContent = 'Create Account'; }
   }
