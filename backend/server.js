@@ -7,6 +7,7 @@ const bcrypt     = require('bcryptjs');
 const jwt        = require('jsonwebtoken');
 const path       = require('path');
 const crypto     = require('crypto');
+const soloGame   = require('./solo-engine');
 require('dotenv').config();
 
 // ── EMAIL (Resend) ────────────────────────────────────
@@ -374,6 +375,16 @@ async function connectDB() {
       player_hand VARCHAR(100),
       dealer_hand VARCHAR(100),
       played_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `);
+
+  // A single active solo game per user persists through Render restarts.
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS solo_games (
+      user_id INT NOT NULL PRIMARY KEY,
+      state_json LONGTEXT NOT NULL,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     )
   `);
@@ -928,52 +939,105 @@ app.post('/api/weekly-bonus', auth, async (req, res) => {
   } catch { res.status(500).json({ error: 'Server error' }); }
 });
 
-// ── GAME RESULT ───────────────────────────────────────
-app.post('/api/game/result', auth, async (req, res) => {
+// ── SERVER-AUTHORITATIVE SOLO BLACKJACK ────────────────
+// Never accept results or payout values from a browser.
+async function settleSolo(conn, userId, player, game) {
+  const outcome = game.outcome;
+  if(!outcome) return player.balance;
+  const wins = outcome.hands.filter(h=>['win','double_win','dealer_bust','blackjack'].includes(h.result)).length;
+  const losses = outcome.hands.filter(h=>['bust','lose'].includes(h.result)).length;
+  const pushes = outcome.hands.filter(h=>h.result==='push').length;
+  const blackjacks = outcome.hands.filter(h=>h.result==='blackjack').length;
+  const streak = wins > 0 ? player.win_streak+1 : 0;
+  const net = outcome.net;
+  const points = player.total_won + Math.max(0,net);
+  const biggestWin = Math.max(player.biggest_win,net);
+  const updatedBalance=player.balance+outcome.payout;
+  await conn.execute(`UPDATE users SET balance=?, wins=wins+?, losses=losses+?, pushes=pushes+?,
+    blackjacks=blackjacks+?, total_hands=total_hands+1, total_wagered=total_wagered+?,
+    total_won=?, biggest_win=?, win_streak=?, max_win_streak=?, vip_tier=?
+    WHERE id=?`,
+    [updatedBalance,wins,losses,pushes,blackjacks,outcome.stake,
+    points,biggestWin,streak,Math.max(player.max_win_streak,streak),getVipTier(points),userId]);
+  await conn.execute(`INSERT INTO game_history
+    (user_id,result,bet,payout,balance_after,player_hand,dealer_hand)
+    VALUES (?,?,?,?,?,?,?)`,
+    [userId,outcome.result,outcome.stake,outcome.payout,updatedBalance,
+      outcome.playerHand,outcome.dealerHand]);
+  return updatedBalance;
+}
+function soloError(res,err) {
+  if (err.clientStatus) return res.status(err.clientStatus).json({ error: err.message });
+  console.error('Solo game failed:',err.message);
+  return res.status(500).json({ error: 'Unable to complete game request' });
+}
+function clientError(message,status=400){const error=new Error(message);error.clientStatus=status;return error;}
+app.get('/api/solo/state', auth, async(req,res)=>{
   try {
-    const { result, bet, payout } = req.body;
-    if (!result || bet == null || payout == null) return res.status(400).json({ error: 'Missing fields' });
-
-    const [rows] = await db.execute('SELECT * FROM users WHERE id=?', [req.user.id]);
-    if (!rows.length) return res.status(404).json({ error: 'Not found' });
-    const u = rows[0];
-
-    let { wins, losses, pushes, blackjacks, total_hands, total_wagered, total_won, biggest_win, balance, win_streak, max_win_streak } = u;
-    total_hands += 1; total_wagered += bet;
-    balance = Math.max(0, balance - bet + payout);
-
-    const isWin = ['win','dealer_bust','blackjack','double_win','split_win'].includes(result);
-    if (result === 'blackjack') {
-      wins++; blackjacks++;
-      const profit = payout - bet; total_won += profit; if (profit > biggest_win) biggest_win = profit;
-      win_streak++;
-    } else if (isWin) {
-      wins++;
-      const profit = payout - bet; total_won += profit; if (profit > biggest_win) biggest_win = profit;
-      win_streak++;
-    } else if (result === 'push') {
-      pushes++; win_streak = 0;
-    } else {
-      losses++; win_streak = 0;
-    }
-    if (win_streak > max_win_streak) max_win_streak = win_streak;
-    if (balance === 0) balance = 0; // let client handle buy-coins prompt
-
-    const vip_tier = getVipTier(total_won);
-
-    await db.execute(`
-      UPDATE users SET balance=?,wins=?,losses=?,pushes=?,blackjacks=?,
-        total_hands=?,total_wagered=?,total_won=?,biggest_win=?,
-        win_streak=?,max_win_streak=?,vip_tier=?
-      WHERE id=?
-    `, [balance,wins,losses,pushes,blackjacks,total_hands,total_wagered,total_won,biggest_win,win_streak,max_win_streak,vip_tier,u.id]);
-
-    const updatedUser = {...u,wins,losses,pushes,blackjacks,total_hands,total_wagered,total_won,biggest_win,win_streak,max_win_streak,balance};
-    const newAchievements = await checkAndUnlockAchievements(u.id, updatedUser, result, bet, balance);
-
-    res.json({ balance, vipTier: vip_tier, tierProgress: getTierProgress(total_won), stats: extractStats(updatedUser), newAchievements });
-  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
+    const [[user]] = await db.execute('SELECT balance FROM users WHERE id=?',[req.user.id]);
+    if(!user)return res.status(404).json({ error:'Account not found' });
+    const [rows]=await db.execute('SELECT state_json FROM solo_games WHERE user_id=?',[req.user.id]);
+    if(!rows.length)return res.json({active:false,balance:user.balance});
+    return res.json(soloGame.view(JSON.parse(rows[0].state_json),user.balance));
+  } catch(e){return soloError(res,e);}
 });
+app.post('/api/solo/start', auth, throttle(100,10*60*1000), async(req,res)=>{
+  const conn=await db.getConnection();
+  try {
+    const bet=req.body.bet;
+    if(!Number.isSafeInteger(bet)||bet<1||bet>100000) throw clientError('Invalid chip amount');
+    await conn.beginTransaction();
+    const [[user]]=await conn.execute('SELECT * FROM users WHERE id=? FOR UPDATE',[req.user.id]);
+    if(!user)throw clientError('Account not found',404);
+    const [active]=await conn.execute('SELECT state_json FROM solo_games WHERE user_id=? FOR UPDATE',[req.user.id]);
+    if(active.length)throw clientError('Finish your current round first',409);
+    if(user.balance<bet)throw clientError('Insufficient chips');
+    const game=soloGame.create(bet);
+    let balance=user.balance-bet;
+    await conn.execute('UPDATE users SET balance=? WHERE id=?',[balance,req.user.id]);
+    if(game.phase==='finished'){
+      balance=await settleSolo(conn,req.user.id,{...user,balance},game);
+    } else {
+      await conn.execute('INSERT INTO solo_games (user_id,state_json) VALUES (?,?)',
+        [req.user.id,JSON.stringify(game)]);
+    }
+    await conn.commit();
+    return res.json(soloGame.view(game,balance));
+  } catch(e){await conn.rollback();return soloError(res,e);}
+  finally{conn.release();}
+});
+app.post('/api/solo/action', auth, throttle(600,10*60*1000), async(req,res)=>{
+  const conn=await db.getConnection();
+  try {
+    const action=req.body.action;
+    if(!['hit','stand','double','split','insurance_yes','insurance_no'].includes(action))
+      throw clientError('Invalid action');
+    await conn.beginTransaction();
+    const [[user]]=await conn.execute('SELECT * FROM users WHERE id=? FOR UPDATE',[req.user.id]);
+    if(!user)throw clientError('Account not found',404);
+    const [rows]=await conn.execute('SELECT state_json FROM solo_games WHERE user_id=? FOR UPDATE',[req.user.id]);
+    if(!rows.length)throw clientError('No active round',409);
+    const game=JSON.parse(rows[0].state_json);
+    let extraStake;
+    try{extraStake=soloGame.play(game,action,user.balance);}
+    catch(e){throw clientError(e.message);}
+    if(extraStake>user.balance)throw clientError('Insufficient chips');
+    let balance=user.balance-extraStake;
+    if(extraStake)await conn.execute('UPDATE users SET balance=? WHERE id=?',[balance,req.user.id]);
+    if(game.phase==='finished'){
+      balance=await settleSolo(conn,req.user.id,{...user,balance},game);
+      await conn.execute('DELETE FROM solo_games WHERE user_id=?',[req.user.id]);
+    } else {
+      await conn.execute('UPDATE solo_games SET state_json=? WHERE user_id=?',[JSON.stringify(game),req.user.id]);
+    }
+    await conn.commit();
+    return res.json(soloGame.view(game,balance));
+  }catch(e){await conn.rollback();return soloError(res,e);}
+  finally{conn.release();}
+});
+// Disabled legacy endpoints previously trusted arbitrary browser winnings.
+app.post('/api/game/result', auth, (req,res)=>
+  res.status(410).json({ error:'Update your game: results are calculated by the server.' }));
 
 // ── TRANSACTIONS ─────────────────────────────────────
 app.get('/api/transactions', auth, async (req, res) => {
@@ -1004,17 +1068,8 @@ app.get('/api/game-history', auth, async (req, res) => {
   } catch(err) { res.status(500).json({error:'Server error'}); }
 });
 
-app.post('/api/game-history', auth, async (req, res) => {
-  try {
-    const { result, bet, payout, balanceAfter, playerHand, dealerHand } = req.body;
-    if (!result || !bet) return res.status(400).json({error:'Missing fields'});
-    await db.execute(
-      'INSERT INTO game_history (user_id, result, bet, payout, balance_after, player_hand, dealer_hand) VALUES (?,?,?,?,?,?,?)',
-      [req.user.id, result, bet, payout||0, balanceAfter||0, playerHand||'', dealerHand||'']
-    );
-    res.json({success:true});
-  } catch(err) { res.status(500).json({error:'Server error'}); }
-});
+app.post('/api/game-history', auth, (req, res) =>
+  res.status(410).json({ error: 'Game history is recorded by the server.' }));
 
 // ── PROFILE PAGE ──────────────────────────────────────
 app.get('/api/profile/:username', async (req, res) => {
