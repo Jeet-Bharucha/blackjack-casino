@@ -73,7 +73,7 @@ A full-stack online Blackjack casino web application with real payments, tournam
 
 ### ⚙️ Admin Panel
 - Create and manage tournaments
-- View and verify user accounts
+- View and manage user accounts without storing new ID or selfie submissions
 - Manage cosmetics shop inventory
 
 ---
