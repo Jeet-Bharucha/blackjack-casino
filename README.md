@@ -1,6 +1,6 @@
 # ♠ Blackjack Casino Royale
 
-A full-stack online Blackjack casino web application with real payments, tournaments, a cosmetics shop, leaderboards, VIP tiers, and more.
+A full-stack Blackjack portfolio game with trusted solo rounds, private practice tables, cosmetics, tournaments, leaderboards, and daily challenges. Real-money purchases are disabled by default.
 
 🌐 **Live Site:** [blackjack-casino-inky.vercel.app](https://blackjack-casino-inky.vercel.app)
 
@@ -12,12 +12,12 @@ A full-stack online Blackjack casino web application with real payments, tournam
 |-------|-----------|
 | Frontend | HTML5, CSS3, Vanilla JavaScript |
 | Backend | Node.js, Express.js |
-| Database | MySQL (Railway) |
+| Database | TiDB Cloud (MySQL-compatible) |
 | Real-time | Socket.IO |
-| Payments | Stripe Checkout |
+| Payments | Disabled by default (optional integration) |
 | Email | Resend API |
 | Auth | JWT (JSON Web Tokens), bcryptjs |
-| Deployment | Railway (backend), Vercel (frontend) |
+| Deployment | Render (backend), Vercel (frontend) |
 | Version Control | Git, GitHub |
 
 ---
@@ -156,19 +156,20 @@ BlackjackApp/
 
 | Service | Purpose |
 |---------|---------|
-| **Railway** | Hosts the Node.js backend + MySQL database |
+| **Render** | Hosts the Node.js backend | 
+| **TiDB Cloud** | Hosts the MySQL-compatible database |
 | **Vercel** | Hosts the static frontend HTML/CSS/JS |
 | **Stripe** | Processes real payments |
 | **Resend** | Sends transactional emails |
 
 ---
 
-## Environment Variables (Railway)
+## Environment Variables (Render)
 
 | Variable | Description |
 |----------|-------------|
-| `DB_HOST` | MySQL internal host |
-| `DB_PORT` | MySQL port |
+| `DB_HOST` | TiDB Cloud hostname |
+| `DB_PORT` | 4000 for TiDB Cloud Starter |
 | `DB_USER` | MySQL username |
 | `DB_PASSWORD` | MySQL password |
 | `DB_NAME` | Database name |
@@ -176,15 +177,37 @@ BlackjackApp/
 | `STRIPE_SECRET_KEY` | Stripe secret API key |
 | `STRIPE_WEBHOOK_SECRET` | Stripe webhook signing secret |
 | `RESEND_API_KEY` | Resend email API key |
-| `APP_URL` | Frontend URL (Vercel) |
+| `APP_URL` | Canonical frontend URL (Vercel) |
+| `FRONTEND_ORIGINS` | Optional comma-separated list of allowed browser origins |
+| `EMAIL_FROM` | Verified sender address for Resend password-reset messages |
+| `ENABLE_REAL_MONEY_PURCHASES` | Defaults off; only consider enabling after legal/provider review |
 
 ---
 
 ## Resume Description
 
-> **Blackjack Casino Royale** — Full-stack web application built with Node.js, Express, MySQL, and Socket.IO. Features include real-time multiplayer, Stripe payment integration, JWT authentication, a cosmetics shop with 50+ items, VIP progression system, tournament system, and automated email invoicing via Resend API. Deployed on Railway (backend) and Vercel (frontend).
+> **Blackjack Casino Royale** — Full-stack web application built with Node.js, Express, MySQL, and Socket.IO. Features include real-time multiplayer, Stripe payment integration, JWT authentication, a cosmetics shop with 50+ items, VIP progression system, tournament system, and automated email invoicing via Resend API. Deployed on Render (backend), TiDB Cloud (database), and Vercel (frontend).
 
 ---
+
+
+## Secure free-play upgrade (October 2026)
+
+- **Solo games are server-authoritative:** card draws, settlement, balance deductions, and history recording happen in the backend. Untrusted `/api/game/result` and `POST /api/game-history` endpoints return HTTP 410.
+- **Crash recovery:** unfinished single-player rounds are stored in the `solo_games` table and resume on refresh or after backend restart.
+- **Private multiplayer:** invitation codes, invite links and ready-up for 2+ players. Private/public live tables use a **separate temporary 1,000-chip practice stack**. They do not change account balances or rankings.
+- **Season leaderboard:** `/api/leaderboard/season` ranks only `solo_results` recorded by the authoritative engine. Older untrusted historic rows do not count toward the season.
+- **Daily challenges:** earn and claim virtual-chip bonuses from verified solo rounds via `/api/challenges` and `/api/challenges/claim` (one claim per challenge per UTC day).
+- **Free-play payments:** checkout and subscriptions are disabled unless `ENABLE_REAL_MONEY_PURCHASES=true` and valid Stripe secrets are supplied. Do not enable real-money features without appropriate legal/payment provider review.
+- **Authentication:** login throttling, password-reset codes delivered by email (never returned in responses), and token invalidation after password reset. Account resets require a working `RESEND_API_KEY` and approved `EMAIL_FROM`; otherwise the reset route reports that email is not configured.
+- **Player experience:** saved mute setting, card-deal animations, reduced-motion support, and improved small-screen multiplayer layout.
+- **Age gate:** registration uses a self-reported date of birth (21+). This **does not independently verify age**.
+
+## Development checks
+
+Run `cd backend && npm test` for game-engine unit tests. On a test deployment, verify `GET /api/health`, registration, gameplay, shop purchases with virtual chips, challenge claims, leaderboard, password reset email delivery, and multiplayer private invitations.
+
+**Legacy data caution:** Existing ID/selfie images from the old verification flow may still be present in your database. The old upload endpoints have been removed, but images already stored or backed up were not deleted by these changes. Review and safely purge those records separately after confirming any retention obligations.
 
 ## License
 
