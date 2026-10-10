@@ -77,6 +77,7 @@
       playTone(won?'win':'lose');
       if(won){spawnConfetti();triggerWinAnimation();}
       setStatus('Round complete — next hand?');
+      window.dispatchEvent(new Event('bj:round-complete'));
       loadUser();
     }else if(st.phase==='insurance') setStatus('Dealer has an Ace — choose insurance');
     else setStatus('Your move — hit, stand, double, or split');
