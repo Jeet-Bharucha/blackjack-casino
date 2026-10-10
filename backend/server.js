@@ -33,44 +33,6 @@ async function sendEmail({ to, subject, html }) {
   } catch (e) { console.warn('Email sending failed:', e.message); return false; }
 }
 
-function receiptEmailHTML({ username, chips, amount, newBalance, pkg }) {
-  return `
-  <div style="background:#0d0500;padding:40px 20px;font-family:Georgia,serif;color:#f0f0f0;max-width:520px;margin:0 auto;border-radius:12px;">
-    <div style="text-align:center;margin-bottom:28px;">
-      <div style="font-size:40px;">♠</div>
-      <h1 style="color:#ffd764;letter-spacing:6px;font-size:22px;margin:8px 0 4px;">BLACKJACK</h1>
-      <p style="color:rgba(255,215,100,.4);font-size:12px;letter-spacing:2px;">Casino Royale</p>
-    </div>
-    <div style="background:rgba(76,255,145,.08);border:1px solid rgba(76,255,145,.3);border-radius:10px;padding:24px;text-align:center;margin-bottom:24px;">
-      <p style="color:rgba(76,255,145,.7);font-size:11px;letter-spacing:3px;text-transform:uppercase;margin-bottom:8px;">Payment Successful</p>
-      <p style="color:#4cff91;font-size:42px;font-weight:700;margin:0;">+$${chips.toLocaleString()}</p>
-      <p style="color:rgba(255,255,255,.4);font-size:13px;margin-top:6px;">chips added to your account</p>
-    </div>
-    <table style="width:100%;border-collapse:collapse;margin-bottom:24px;">
-      <tr style="border-bottom:1px solid rgba(255,255,255,.06);">
-        <td style="padding:10px 0;color:rgba(255,255,255,.4);font-size:13px;">Account</td>
-        <td style="padding:10px 0;color:#f0f0f0;font-size:13px;text-align:right;">${username}</td>
-      </tr>
-      <tr style="border-bottom:1px solid rgba(255,255,255,.06);">
-        <td style="padding:10px 0;color:rgba(255,255,255,.4);font-size:13px;">Package</td>
-        <td style="padding:10px 0;color:#f0f0f0;font-size:13px;text-align:right;">${pkg}</td>
-      </tr>
-      <tr style="border-bottom:1px solid rgba(255,255,255,.06);">
-        <td style="padding:10px 0;color:rgba(255,255,255,.4);font-size:13px;">Amount Charged</td>
-        <td style="padding:10px 0;color:#ffd764;font-size:13px;text-align:right;">$${(amount/100).toFixed(2)}</td>
-      </tr>
-      <tr>
-        <td style="padding:10px 0;color:rgba(255,255,255,.4);font-size:13px;">New Balance</td>
-        <td style="padding:10px 0;color:#4cff91;font-size:15px;font-weight:700;text-align:right;">$${newBalance.toLocaleString()}</td>
-      </tr>
-    </table>
-    <div style="text-align:center;">
-      <a href="${process.env.APP_URL}/blackjack.html" style="display:inline-block;padding:12px 32px;background:linear-gradient(135deg,#c9a227,#ffd764);color:#1a0a00;border-radius:6px;font-weight:700;letter-spacing:2px;text-decoration:none;font-size:12px;">Back to the Table</a>
-    </div>
-    <p style="text-align:center;color:rgba(255,255,255,.15);font-size:11px;margin-top:24px;">For entertainment only · No real gambling · Blackjack Casino Royale</p>
-  </div>`;
-}
-
 const app    = express();
 const server = http.createServer(app);
 const io     = new Server(server, { cors: { origin: '*' } });
@@ -78,13 +40,6 @@ const io     = new Server(server, { cors: { origin: '*' } });
 const PORT       = process.env.PORT       || 4000;
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) throw new Error('JWT_SECRET environment variable must be set');
-
-// ── STRIPE ────────────────────────────────────────────
-const Stripe = require('stripe');
-const stripe = process.env.STRIPE_SECRET_KEY && !process.env.STRIPE_SECRET_KEY.includes('REPLACE_ME')
-  ? Stripe(process.env.STRIPE_SECRET_KEY)
-  : null;
-if (!stripe) console.warn('⚠️  Stripe not configured — set STRIPE_SECRET_KEY in .env');
 
 app.set('trust proxy', 1);
 const allowedOrigins = (process.env.FRONTEND_ORIGINS ||
@@ -113,55 +68,6 @@ function throttle(maxAttempts, windowMs) {
     next();
   };
 }
-
-// Stripe webhook needs raw body — must be registered BEFORE express.json()
-app.post('/api/stripe-webhook', express.raw({ type: 'application/json' }), async (req, res) => {
-  if (!stripe) return res.status(503).json({ error: 'Stripe not configured' });
-  const sig = req.headers['stripe-signature'];
-  let event;
-  try {
-    event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
-  } catch (err) {
-    console.error('Webhook signature failed:', err.message);
-    return res.status(400).send(`Webhook Error: ${err.message}`);
-  }
-
-  if (event.type === 'checkout.session.completed') {
-    const session = event.data.object;
-    const userId  = parseInt(session.metadata?.userId);
-    const chips   = parseInt(session.metadata?.chips);
-    const pkg     = session.metadata?.package || 'chips';
-    if (userId && chips) {
-      try {
-        await db.execute('UPDATE users SET balance = balance + ? WHERE id = ?', [chips, userId]);
-        console.log(`✅ Stripe: credited ${chips} chips to user ${userId}`);
-        // Send receipt email
-        const [rows] = await db.execute('SELECT username, email, balance FROM users WHERE id=?', [userId]);
-        if (rows.length) {
-          const u = rows[0];
-          await sendEmail({
-            to: u.email,
-            subject: `🎉 Payment Confirmed — ${chips.toLocaleString()} chips added!`,
-            html: receiptEmailHTML({ username: u.username, chips, amount: session.amount_total, newBalance: u.balance, pkg }),
-          });
-        }
-      } catch (e) { console.error('DB error crediting chips:', e.message); }
-    }
-  }
-  // Subscription activated / renewed
-  if (['customer.subscription.created','customer.subscription.updated'].includes(event.type)) {
-    const sub = event.data.object;
-    const userId = parseInt(sub.metadata?.userId);
-    if (userId && sub.status === 'active') {
-      try {
-        await db.execute('UPDATE users SET balance=balance+500 WHERE id=?', [userId]);
-        console.log(`✅ VIP subscription active for user ${userId} — +500 chips`);
-      } catch (e) { console.error('Subscription DB error:', e.message); }
-    }
-  }
-
-  res.json({ received: true });
-});
 
 app.use(express.json({ limit: '5mb' })); // allow base64 avatar uploads
 app.use(express.static(path.join(__dirname, '..')));
@@ -293,18 +199,6 @@ async function connectDB() {
       UNIQUE KEY uq_user_cosmetic (user_id, cosmetic_id),
       FOREIGN KEY (user_id)     REFERENCES users(id)     ON DELETE CASCADE,
       FOREIGN KEY (cosmetic_id) REFERENCES cosmetics(id) ON DELETE CASCADE
-    )
-  `);
-
-  await db.execute(`
-    CREATE TABLE IF NOT EXISTS stripe_purchases (
-      id           INT AUTO_INCREMENT PRIMARY KEY,
-      user_id      INT NOT NULL,
-      session_id   VARCHAR(255) NOT NULL UNIQUE,
-      chips        INT NOT NULL,
-      pkg          VARCHAR(50),
-      credited_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     )
   `);
 
@@ -802,96 +696,6 @@ app.delete('/api/account', auth, async (req, res) => {
   } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
 });
 
-// ── BUY COINS (Stripe Checkout) ───────────────────────
-const CHIP_PACKAGES = {
-  starter: { chips: 500,  price: 99,   label: '500 Chips',    popular: false },
-  popular: { chips: 1000, price: 199,  label: '1,000 Chips',  popular: true  },
-  big:     { chips: 2500, price: 499,  label: '2,500 Chips',  popular: false },
-  mega:    { chips: 5000, price: 999,  label: '5,000 Chips',  popular: false },
-};
-
-app.post('/api/buy-coins', auth, async (req, res) => {
-  if (process.env.ENABLE_REAL_MONEY_PURCHASES !== 'true' || !stripe)
-    return res.status(503).json({ error: 'Paid chip purchases are disabled for free-play mode.' });
-  const { package: pkg } = req.body;
-  const pack = CHIP_PACKAGES[pkg];
-  if (!pack) return res.status(400).json({ error: 'Invalid package' });
-
-  // If Stripe isn't configured fall back to free (dev mode)
-  if (!stripe) {
-    await db.execute('UPDATE users SET balance = balance + ? WHERE id = ?', [pack.chips, req.user.id]);
-    const [rows] = await db.execute('SELECT balance FROM users WHERE id=?', [req.user.id]);
-    return res.json({ balance: rows[0].balance, added: pack.chips, devMode: true });
-  }
-
-  try {
-    const appUrl = process.env.APP_URL || 'https://blackjack-casino-inky.vercel.app';
-    const session = await stripe.checkout.sessions.create({
-      payment_method_types: ['card'],
-      mode: 'payment',
-      line_items: [{
-        price_data: {
-          currency: 'usd',
-          unit_amount: pack.price,
-          product_data: {
-            name: `Blackjack Casino — ${pack.label}`,
-            description: `${pack.chips.toLocaleString()} chips added instantly to your account`,
-            images: [],
-          },
-        },
-        quantity: 1,
-      }],
-      metadata: { userId: String(req.user.id), chips: String(pack.chips), package: pkg },
-      success_url: `${appUrl}/success.html?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url:  `${appUrl}/blackjack.html`,
-    });
-    res.json({ checkoutUrl: session.url });
-  } catch (err) {
-    console.error('Stripe error:', err.message);
-    res.status(500).json({ error: 'Payment session failed. Try again.' });
-  }
-});
-
-// Verify a completed Stripe session (called by success page)
-app.get('/api/verify-payment', auth, async (req, res) => {
-  if (!stripe) return res.status(503).json({ error: 'Stripe not configured' });
-  const { session_id } = req.query;
-  if (!session_id) return res.status(400).json({ error: 'Missing session_id' });
-  try {
-    const session = await stripe.checkout.sessions.retrieve(session_id);
-    if (session.payment_status !== 'paid') return res.status(400).json({ error: 'Payment not completed' });
-    if (parseInt(session.metadata?.userId) !== req.user.id) return res.status(403).json({ error: 'Forbidden' });
-
-    const chips = parseInt(session.metadata?.chips);
-    const pkg   = session.metadata?.package || 'chips';
-
-    // Check if this session was already credited (idempotency)
-    const [existing] = await db.execute('SELECT id FROM stripe_purchases WHERE session_id=?', [session_id]);
-    if (!existing.length) {
-      // Credit chips + record purchase
-      await db.execute('UPDATE users SET balance = balance + ? WHERE id = ?', [chips, req.user.id]);
-      await db.execute('INSERT INTO stripe_purchases (user_id, session_id, chips, pkg) VALUES (?,?,?,?)',
-        [req.user.id, session_id, chips, pkg]);
-
-      // Send invoice email — non-blocking, never delays the response
-      db.execute('SELECT username, email, balance FROM users WHERE id=?', [req.user.id])
-        .then(([uRows]) => {
-          if (uRows.length) {
-            const u = uRows[0];
-            sendEmail({
-              to: u.email,
-              subject: `🎉 Payment Confirmed — ${chips.toLocaleString()} chips added!`,
-              html: receiptEmailHTML({ username: u.username, chips, amount: session.amount_total, newBalance: u.balance, pkg }),
-            }).catch(err => console.error('Invoice email failed:', err.message));
-          }
-        }).catch(() => {});
-    }
-
-    const [rows] = await db.execute('SELECT balance FROM users WHERE id=?', [req.user.id]);
-    res.json({ balance: rows[0].balance, chips, package: pkg });
-  } catch (err) { console.error('verify-payment error:', err.message); res.status(500).json({ error: 'Could not verify payment' }); }
-});
-
 // ── DAILY BONUS ───────────────────────────────────────
 app.post('/api/daily-bonus', auth, throttle(30,10*60*1000), async(req,res)=>{
   const conn=await db.getConnection();
@@ -1125,18 +929,13 @@ app.post('/api/game/result', auth, (req,res)=>
 // ── TRANSACTIONS ─────────────────────────────────────
 app.get('/api/transactions', auth, async (req, res) => {
   try {
-    const [purchases] = await db.execute(
-      'SELECT "chip_purchase" as type, chips, pkg as description, credited_at as date FROM stripe_purchases WHERE user_id=? ORDER BY credited_at DESC LIMIT 50',
-      [req.user.id]
-    );
     const [cosmetics] = await db.execute(
       `SELECT "cosmetic" as type, c.price as chips, c.name as description, uc.purchased_at as date
        FROM user_cosmetics uc JOIN cosmetics c ON c.id=uc.cosmetic_id
        WHERE uc.user_id=? ORDER BY uc.purchased_at DESC LIMIT 50`,
       [req.user.id]
     );
-    const all = [...purchases, ...cosmetics].sort((a,b) => new Date(b.date) - new Date(a.date));
-    res.json(all);
+    res.json(cosmetics);
   } catch(err) { res.status(500).json({error:'Server error'}); }
 });
 
@@ -1531,42 +1330,6 @@ app.post('/api/use-referral', auth, async (req, res) => {
     const [upd] = await db.execute('SELECT balance FROM users WHERE id=?', [req.user.id]);
     res.json({ success: true, bonus: BONUS, newBalance: upd[0].balance, referrer: refRows[0].username });
   } catch (e) { console.error(e); res.status(500).json({ error: 'Server error' }); }
-});
-
-// ── SUBSCRIPTION / VIP PASS ($4.99/month) ────────────
-app.post('/api/subscribe', auth, async (req, res) => {
-  if (process.env.ENABLE_REAL_MONEY_PURCHASES !== 'true' || !stripe)
-    return res.status(503).json({ error: 'Paid subscriptions are disabled for free-play mode.' });
-  if (!stripe) {
-    await db.execute('UPDATE users SET balance=balance+500 WHERE id=?', [req.user.id]);
-    const [upd] = await db.execute('SELECT balance FROM users WHERE id=?', [req.user.id]);
-    return res.json({ devMode: true, message: 'Dev mode: +500 chips (VIP pass simulated)', newBalance: upd[0].balance });
-  }
-  try {
-    const [rows] = await db.execute('SELECT email FROM users WHERE id=?', [req.user.id]);
-    const appUrl = process.env.APP_URL || 'https://blackjack-casino-inky.vercel.app';
-    const session = await stripe.checkout.sessions.create({
-      payment_method_types: ['card'],
-      mode: 'subscription',
-      line_items: [{
-        price_data: {
-          currency: 'usd',
-          unit_amount: 499,
-          recurring: { interval: 'month' },
-          product_data: {
-            name: 'Blackjack Casino Royale — VIP Pass',
-            description: '+500 chips on activation + renewal, exclusive table access, priority support',
-          },
-        },
-        quantity: 1,
-      }],
-      metadata: { userId: String(req.user.id), type: 'vip_subscription' },
-      customer_email: rows[0]?.email,
-      success_url: `${appUrl}/blackjack.html?subscribed=1`,
-      cancel_url:  `${appUrl}/blackjack.html`,
-    });
-    res.json({ checkoutUrl: session.url });
-  } catch (e) { console.error(e); res.status(500).json({ error: 'Could not create subscription' }); }
 });
 
 // ── COSMETICS SHOP ────────────────────────────────────
