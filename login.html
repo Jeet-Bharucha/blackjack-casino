@@ -172,7 +172,7 @@
     <div class="error-msg" id="registerError"></div>
     <button class="btn-submit" type="submit" id="registerBtn">Create Account</button>
     <div class="divider">welcome bonus</div>
-    <div class="bonus-note">Start with <span>$500</span> in chips — free · Must be 21+</div>
+    <div class="bonus-note">Start with <span>$500</span> in chips — free · Must be 21+<br/>No government ID or selfie upload required</div>
     <div style="text-align:center;font-family:'Crimson Text',serif;font-size:12px;color:rgba(255,255,255,0.25);margin-top:8px;">By registering you agree to our <a href="terms.html" style="color:rgba(255,215,100,0.45);text-decoration:none;transition:color .2s;" onmouseover="this.style.color='#ffd764'" onmouseout="this.style.color='rgba(255,215,100,0.45)'">Terms of Service</a> and <a href="privacy.html" style="color:rgba(255,215,100,0.45);text-decoration:none;transition:color .2s;" onmouseover="this.style.color='#ffd764'" onmouseout="this.style.color='rgba(255,215,100,0.45)'">Privacy Policy</a></div>
   </form>
 
@@ -313,8 +313,8 @@
       if (!res.ok) { errEl.textContent = data.error; return; }
       localStorage.setItem('bj_token', data.token);
       localStorage.setItem('bj_user', JSON.stringify(data.user));
-      // Redirect to age verification first
-      window.location.href = data.requiresVerification ? 'verify-age.html' : 'blackjack.html';
+      // Date of birth is checked at registration; no ID upload is required.
+      window.location.href = 'blackjack.html';
     } catch { errEl.textContent = 'Cannot connect to server. Is it running?'; }
     finally { btn.disabled = false; btn.textContent = 'Create Account'; }
   }

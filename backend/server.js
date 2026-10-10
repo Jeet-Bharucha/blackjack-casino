@@ -131,31 +131,6 @@ app.post('/api/stripe-webhook', express.raw({ type: 'application/json' }), async
     }
   }
 
-  // Stripe Identity verified via webhook
-  if (event.type === 'identity.verification_session.verified') {
-    const session = event.data.object;
-    const userId = parseInt(session.metadata?.userId);
-    if (userId) {
-      try {
-        await db.execute("UPDATE users SET verify_status='verified', verified_at=NOW() WHERE id=?", [userId]);
-        const [rows] = await db.execute('SELECT email, username FROM users WHERE id=?', [userId]);
-        if (rows.length) {
-          await sendEmail({
-            to: rows[0].email,
-            subject: '✅ Identity Verified — Welcome to Blackjack Casino!',
-            html: `<div style="background:#0d0500;padding:40px;font-family:Georgia,serif;color:#f0f0f0;max-width:500px;margin:0 auto;border-radius:12px;text-align:center;">
-              <div style="font-size:48px;margin-bottom:16px;">✅</div>
-              <h1 style="color:#4cff91;">Verified, ${rows[0].username}!</h1>
-              <p style="color:rgba(255,255,255,.5);margin:16px 0;">Your identity has been verified. You can now play!</p>
-              <a href="${process.env.APP_URL}/blackjack.html" style="display:inline-block;padding:12px 32px;background:linear-gradient(135deg,#c9a227,#ffd764);color:#1a0a00;border-radius:6px;font-weight:700;text-decoration:none;">Play Now →</a>
-            </div>`,
-          });
-        }
-        console.log(`✅ Stripe Identity verified user ${userId}`);
-      } catch (e) { console.error('Identity webhook error:', e.message); }
-    }
-  }
-
   res.json({ received: true });
 });
 
@@ -205,7 +180,7 @@ async function connectDB() {
       max_win_streak INT           NOT NULL DEFAULT 0,
       created_at     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
       date_of_birth  DATE          NULL,
-      verify_status  VARCHAR(20)   NOT NULL DEFAULT 'unverified',
+      verify_status  VARCHAR(20)   NOT NULL DEFAULT 'not_required',
       is_admin       TINYINT(1)    NOT NULL DEFAULT 0,
       id_document         MEDIUMTEXT    NULL,
       selfie_photo        MEDIUMTEXT    NULL,
@@ -494,7 +469,6 @@ function publicUser(u, achievements = []) {
     stats:              extractStats(u),
     achievements,
     createdAt:          u.created_at,
-    verifyStatus:       u.verify_status || 'unverified',
     hasBonusSlot:       !!u.has_bonus_slot,
     hasInsuranceBoost:  !!u.has_insurance_boost,
     equippedBadge:      u.equipped_badge || null,
@@ -541,14 +515,18 @@ app.post('/api/register', async (req, res) => {
     if (username.length < 3 || username.length > 20) return res.status(400).json({ error: 'Username must be 3–20 characters' });
     if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' });
 
-    // Age verification — must be 21+
-    if (!dateOfBirth) return res.status(400).json({ error: 'Date of birth is required' });
-    const dob = new Date(dateOfBirth);
+    // Self-reported age gate: 21+ only. This does not verify identity.
+    if (typeof dateOfBirth !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(dateOfBirth)) {
+      return res.status(400).json({ error: 'Enter a valid date of birth (YYYY-MM-DD)' });
+    }
+    const [year, month, day] = dateOfBirth.split('-').map(Number);
+    const dob = new Date(Date.UTC(year, month - 1, day));
+    if (dob.getUTCFullYear() !== year || dob.getUTCMonth() !== month - 1 || dob.getUTCDate() !== day) {
+      return res.status(400).json({ error: 'Enter a valid date of birth' });
+    }
     const today = new Date();
-    let age = today.getFullYear() - dob.getFullYear();
-    const m = today.getMonth() - dob.getMonth();
-    if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) age--;
-    if (age < 21) return res.status(400).json({ error: 'You must be 21 or older to play. This platform is for adults only.' });
+    const cutoff = new Date(Date.UTC(today.getUTCFullYear() - 21, today.getUTCMonth(), today.getUTCDate()));
+    if (dob > cutoff) return res.status(400).json({ error: 'You must be 21 or older to play. This platform is for adults only.' });
 
     const [existing] = await db.execute('SELECT id,username,email FROM users WHERE email=? OR username=?', [email.toLowerCase(), username]);
     if (existing.length) {
@@ -558,7 +536,7 @@ app.post('/api/register', async (req, res) => {
     const hash = await bcrypt.hash(password, 10);
     const [result] = await db.execute(
       'INSERT INTO users (username, email, password, balance, date_of_birth, verify_status) VALUES (?,?,?,500,?,?)',
-      [username, email.toLowerCase(), hash, dateOfBirth, 'unverified']
+      [username, email.toLowerCase(), hash, dateOfBirth, 'not_required']
     );
     const token = jwt.sign({ id: result.insertId, username }, JWT_SECRET, { expiresIn: '7d' });
 
@@ -569,70 +547,21 @@ app.post('/api/register', async (req, res) => {
       html: `<div style="background:#0d0500;padding:40px;font-family:Georgia,serif;color:#f0f0f0;max-width:500px;margin:0 auto;border-radius:12px;text-align:center;">
         <div style="font-size:40px;margin-bottom:10px;">♠</div>
         <h1 style="color:#ffd764;letter-spacing:4px;">Welcome, ${username}!</h1>
-        <p style="color:rgba(255,255,255,.5);margin:16px 0;">Your account has been created. Complete age verification to start playing.</p>
+        <p style="color:rgba(255,255,255,.5);margin:16px 0;">Your account is ready! No government ID or selfie is requested to play.</p>
         <div style="background:rgba(76,255,145,.08);border:1px solid rgba(76,255,145,.3);border-radius:8px;padding:18px;margin:24px 0;">
           <p style="color:#4cff91;font-size:24px;font-weight:700;margin:0;">$500 Free Chips</p>
-          <p style="color:rgba(255,255,255,.4);font-size:13px;margin-top:4px;">Ready after verification</p>
+          <p style="color:rgba(255,255,255,.4);font-size:13px;margin-top:4px;">Available now</p>
         </div>
-        <a href="${process.env.APP_URL}/verify-age.html" style="display:inline-block;padding:12px 32px;background:linear-gradient(135deg,#c9a227,#ffd764);color:#1a0a00;border-radius:6px;font-weight:700;letter-spacing:2px;text-decoration:none;">Verify My Age →</a>
+        <a href="${process.env.APP_URL}/blackjack.html" style="display:inline-block;padding:12px 32px;background:linear-gradient(135deg,#c9a227,#ffd764);color:#1a0a00;border-radius:6px;font-weight:700;letter-spacing:2px;text-decoration:none;">Play Blackjack →</a>
       </div>`,
     });
 
     res.json({
       token,
-      user: { username, displayName: username, avatar: null, balance: 500, vipTier: 'Bronze', tierProgress: getTierProgress(0), stats: {}, verifyStatus: 'unverified' },
-      requiresVerification: true,
+      user: { username, displayName: username, avatar: null, balance: 500, vipTier: 'Bronze', tierProgress: getTierProgress(0), stats: {}, verifyStatus: 'not_required' },
+      requiresVerification: false,
     });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
-});
-
-// ── AGE VERIFICATION ──────────────────────────────────
-app.post('/api/verify-identity', auth, async (req, res) => {
-  try {
-    const { idDocument, selfiePhoto } = req.body;
-    if (!idDocument || !selfiePhoto) return res.status(400).json({ error: 'Both ID document and selfie are required' });
-    if (!idDocument.startsWith('data:image/') || !selfiePhoto.startsWith('data:image/'))
-      return res.status(400).json({ error: 'Invalid image format' });
-
-    await db.execute(
-      'UPDATE users SET id_document=?, selfie_photo=?, verify_status=? WHERE id=?',
-      [idDocument, selfiePhoto, 'pending', req.user.id]
-    );
-
-    // In a real app: send docs to admin or run AI face match here
-    // For demo: auto-approve after 2 seconds (simulate review)
-    setTimeout(async () => {
-      try {
-        await db.execute(
-          'UPDATE users SET verify_status=?, verified_at=NOW() WHERE id=? AND verify_status=?',
-          ['verified', req.user.id, 'pending']
-        );
-        const [rows] = await db.execute('SELECT email, username FROM users WHERE id=?', [req.user.id]);
-        if (rows.length) {
-          await sendEmail({
-            to: rows[0].email,
-            subject: '✅ Identity Verified — You can now play!',
-            html: `<div style="background:#0d0500;padding:40px;font-family:Georgia,serif;color:#f0f0f0;max-width:500px;margin:0 auto;border-radius:12px;text-align:center;">
-              <div style="font-size:48px;margin-bottom:16px;">✅</div>
-              <h1 style="color:#4cff91;letter-spacing:3px;">Verified!</h1>
-              <p style="color:rgba(255,255,255,.5);margin:16px 0;">Hi ${rows[0].username}, your identity has been verified. You can now access the casino.</p>
-              <a href="${process.env.APP_URL}/blackjack.html" style="display:inline-block;padding:12px 32px;background:linear-gradient(135deg,#c9a227,#ffd764);color:#1a0a00;border-radius:6px;font-weight:700;letter-spacing:2px;text-decoration:none;">Play Now →</a>
-            </div>`,
-          });
-        }
-      } catch (e) { console.error('Auto-approve error:', e.message); }
-    }, 2000);
-
-    res.json({ success: true, status: 'pending', message: 'Documents submitted. Verification usually takes a few moments.' });
-  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
-});
-
-app.get('/api/verify-status', auth, async (req, res) => {
-  try {
-    const [rows] = await db.execute('SELECT verify_status, verified_at FROM users WHERE id=?', [req.user.id]);
-    if (!rows.length) return res.status(404).json({ error: 'Not found' });
-    res.json({ status: rows[0].verify_status, verifiedAt: rows[0].verified_at });
-  } catch { res.status(500).json({ error: 'Server error' }); }
 });
 
 app.post('/api/login', async (req, res) => {
@@ -779,7 +708,7 @@ app.post('/api/buy-coins', auth, async (req, res) => {
   }
 
   try {
-    const appUrl = process.env.APP_URL || 'https://blackjack-casino-production.up.railway.app';
+    const appUrl = process.env.APP_URL || 'https://blackjack-casino-inky.vercel.app';
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
       mode: 'payment',
@@ -894,11 +823,9 @@ async function adminAuth(req, res, next) {
 app.get('/api/admin/stats', adminAuth, async (req, res) => {
   try {
     const [[totals]] = await db.execute('SELECT COUNT(*) as total, SUM(balance) as totalBalance, SUM(total_wagered) as wagered FROM users');
-    const [[verified]] = await db.execute("SELECT COUNT(*) as c FROM users WHERE verify_status='verified'");
-    const [[pending]]  = await db.execute("SELECT COUNT(*) as c FROM users WHERE verify_status='pending'");
     const [[banned]]   = await db.execute("SELECT COUNT(*) as c FROM users WHERE is_banned=1");
     const [[today]]    = await db.execute("SELECT COUNT(*) as c FROM users WHERE DATE(created_at)=CURDATE()");
-    res.json({ totalUsers: totals.total, totalBalance: totals.totalBalance, totalWagered: totals.wagered, verified: verified.c, pending: pending.c, banned: banned.c, signupsToday: today.c });
+    res.json({ totalUsers: totals.total, totalBalance: totals.totalBalance, totalWagered: totals.wagered, banned: banned.c, signupsToday: today.c });
   } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
 
@@ -909,33 +836,12 @@ app.get('/api/admin/users', adminAuth, async (req, res) => {
     const offset = (page - 1) * limit;
     const search = req.query.search ? `%${req.query.search}%` : '%';
     const [rows] = await db.execute(
-      `SELECT id, username, email, balance, vip_tier, verify_status, is_banned, is_admin, created_at, total_hands, total_wagered
+      `SELECT id, username, email, balance, vip_tier, is_banned, is_admin, created_at, total_hands, total_wagered
        FROM users WHERE (username LIKE ? OR email LIKE ?) ORDER BY created_at DESC LIMIT ? OFFSET ?`,
       [search, search, limit, offset]
     );
     const [[{total}]] = await db.execute("SELECT COUNT(*) as total FROM users WHERE username LIKE ? OR email LIKE ?", [search, search]);
     res.json({ users: rows, total, page, pages: Math.ceil(total / limit) });
-  } catch { res.status(500).json({ error: 'Server error' }); }
-});
-
-app.get('/api/admin/verification/:userId', adminAuth, async (req, res) => {
-  try {
-    const [rows] = await db.execute('SELECT username, email, date_of_birth, verify_status, id_document, selfie_photo, verified_at FROM users WHERE id=?', [req.params.userId]);
-    if (!rows.length) return res.status(404).json({ error: 'User not found' });
-    res.json(rows[0]);
-  } catch { res.status(500).json({ error: 'Server error' }); }
-});
-
-app.put('/api/admin/users/:userId/verify', adminAuth, async (req, res) => {
-  try {
-    const { action } = req.body; // 'approve' or 'reject'
-    const status = action === 'approve' ? 'verified' : 'rejected';
-    await db.execute("UPDATE users SET verify_status=?, verified_at=IF(?='verified',NOW(),NULL) WHERE id=?", [status, status, req.params.userId]);
-    if (action === 'approve') {
-      const [rows] = await db.execute('SELECT email, username FROM users WHERE id=?', [req.params.userId]);
-      if (rows.length) await sendEmail({ to: rows[0].email, subject: '✅ Identity Verified — Welcome to Blackjack Casino!', html: `<div style="background:#0d0500;padding:40px;font-family:Georgia,serif;color:#f0f0f0;text-align:center;border-radius:12px;"><div style="font-size:48px;margin-bottom:16px;">✅</div><h1 style="color:#4cff91;">Verified, ${rows[0].username}!</h1><p style="color:rgba(255,255,255,.5);margin:16px 0;">Your identity has been verified. You can now play!</p><a href="${process.env.APP_URL}/blackjack.html" style="display:inline-block;padding:12px 32px;background:linear-gradient(135deg,#c9a227,#ffd764);color:#1a0a00;border-radius:6px;font-weight:700;text-decoration:none;">Play Now →</a></div>` });
-    }
-    res.json({ success: true, status });
   } catch { res.status(500).json({ error: 'Server error' }); }
 });
 
@@ -1309,7 +1215,7 @@ app.get('/api/my-referral', auth, async (req, res) => {
       await db.execute('UPDATE users SET referral_code=? WHERE id=?', [code, req.user.id]);
     }
     const [[{total}]] = await db.execute('SELECT COUNT(*) as total FROM users WHERE referred_by=?', [req.user.id]);
-    const appUrl = process.env.APP_URL || 'https://blackjack-casino-production.up.railway.app';
+    const appUrl = process.env.APP_URL || 'https://blackjack-casino-inky.vercel.app';
     res.json({ code, referralUrl: `${appUrl}/index.html?ref=${code}`, totalReferred: total, bonusPerReferral: 100 });
   } catch (e) { res.status(500).json({ error: 'Server error' }); }
 });
@@ -1341,7 +1247,7 @@ app.post('/api/subscribe', auth, async (req, res) => {
   }
   try {
     const [rows] = await db.execute('SELECT email FROM users WHERE id=?', [req.user.id]);
-    const appUrl = process.env.APP_URL || 'https://blackjack-casino-production.up.railway.app';
+    const appUrl = process.env.APP_URL || 'https://blackjack-casino-inky.vercel.app';
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
       mode: 'subscription',
@@ -1554,39 +1460,6 @@ app.post('/api/admin/send-reminders', adminAuth, async (req, res) => {
     }
     res.json({ success: true, sent });
   } catch (e) { console.error(e); res.status(500).json({ error: 'Server error' }); }
-});
-
-// ── STRIPE IDENTITY ───────────────────────────────────
-app.post('/api/identity/start', auth, async (req, res) => {
-  if (!stripe) return res.status(503).json({ error: 'Stripe not configured' });
-  try {
-    const session = await stripe.identity.verificationSessions.create({
-      type: 'document',
-      metadata: { userId: String(req.user.id) },
-      options: {
-        document: {
-          allowed_types: ['driving_license', 'passport', 'id_card'],
-          require_matching_selfie: true,
-        },
-      },
-    });
-    await db.execute("UPDATE users SET verify_status='pending' WHERE id=?", [req.user.id]);
-    res.json({ clientSecret: session.client_secret, sessionId: session.id });
-  } catch (e) {
-    console.error('Stripe Identity error:', e.message);
-    res.status(500).json({ error: 'Could not start verification: ' + e.message });
-  }
-});
-
-app.get('/api/identity/check/:sessionId', auth, async (req, res) => {
-  if (!stripe) return res.status(503).json({ error: 'Stripe not configured' });
-  try {
-    const session = await stripe.identity.verificationSessions.retrieve(req.params.sessionId);
-    if (session.status === 'verified') {
-      await db.execute("UPDATE users SET verify_status='verified', verified_at=NOW() WHERE id=?", [req.user.id]);
-    }
-    res.json({ status: session.status });
-  } catch (e) { res.status(500).json({ error: 'Could not check verification status' }); }
 });
 
 server.listen(PORT, () => console.log(`🃏 Blackjack server running on http://localhost:${PORT}`));

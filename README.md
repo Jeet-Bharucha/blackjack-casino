@@ -31,7 +31,7 @@ A full-stack online Blackjack casino web application with real payments, tournam
 - Win animations triggered on victories
 
 ### 👤 Accounts & Auth
-- User registration with age verification (must be 21+)
+- User registration with a self-reported date-of-birth age gate (21+), without ID or selfie uploads
 - JWT-based login/logout
 - Password reset via email (6-digit code)
 - Account deletion with password confirmation
@@ -73,7 +73,7 @@ A full-stack online Blackjack casino web application with real payments, tournam
 
 ### ⚙️ Admin Panel
 - Create and manage tournaments
-- View and verify user accounts
+- View and manage user accounts without storing new ID or selfie submissions
 - Manage cosmetics shop inventory
 
 ---
@@ -97,7 +97,7 @@ BlackjackApp/
 ├── admin.html              # Admin panel
 ├── terms.html              # Terms of Service
 ├── privacy.html            # Privacy Policy
-├── verify-age.html         # Age & identity verification
+├── verify-age.html         # Legacy link: no ID upload, continue to game
 ├── success.html            # Payment success page
 ├── cookie-banner.js        # Cookie consent banner
 ├── favicon.svg             # Gold spade favicon

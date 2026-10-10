@@ -128,9 +128,6 @@
     <div class="sidebar-item" onclick="showPage('users')" id="nav-users">
       <span class="sidebar-icon">👥</span> Users
     </div>
-    <div class="sidebar-item" onclick="showPage('verification')" id="nav-verification">
-      <span class="sidebar-icon">🪪</span> Verification
-    </div>
     <div class="sidebar-item" onclick="showPage('banned')" id="nav-banned">
       <span class="sidebar-icon">🚫</span> Banned
     </div>
@@ -163,23 +160,11 @@
           <input class="search-box" id="userSearch" placeholder="Search username or email..." oninput="searchUsers()"/>
         </div>
         <table><thead><tr>
-          <th>Username</th><th>Email</th><th>Balance</th><th>Tier</th><th>Status</th><th>Hands</th><th>Joined</th><th>Actions</th>
+          <th>Username</th><th>Email</th><th>Balance</th><th>Tier</th><th>Account</th><th>Hands</th><th>Joined</th><th>Actions</th>
         </tr></thead>
         <tbody id="usersBody"><tr class="loading-row"><td colspan="8"><span class="spinner"></span>Loading...</td></tr></tbody></table>
       </div>
       <div class="pagination" id="usersPagination"></div>
-    </div>
-
-    <!-- Verification -->
-    <div class="page" id="page-verification">
-      <div class="page-title">ID Verification</div>
-      <div class="page-sub">Review submitted identity documents</div>
-      <div class="table-wrap">
-        <table><thead><tr>
-          <th>Username</th><th>Email</th><th>Date of Birth</th><th>Submitted</th><th>Status</th><th>Actions</th>
-        </tr></thead>
-        <tbody id="verifyBody"><tr class="loading-row"><td colspan="6"><span class="spinner"></span>Loading...</td></tr></tbody>
-      </div>
     </div>
 
     <!-- Banned -->
@@ -257,19 +242,6 @@
   </main>
 </div>
 
-<!-- ID Review Modal -->
-<div class="modal-overlay hidden" id="verifyModal">
-  <div class="modal-box">
-    <div class="modal-title" id="modalUsername">Review Identity</div>
-    <div id="modalContent"></div>
-    <div class="modal-actions">
-      <button class="btn btn-approve" id="modalApprove" onclick="verifyAction('approve')">✓ Approve</button>
-      <button class="btn btn-reject"  id="modalReject"  onclick="verifyAction('reject')">✗ Reject</button>
-      <button class="btn btn-close"   onclick="closeModal()">Close</button>
-    </div>
-  </div>
-</div>
-
 <div class="toast" id="toast"></div>
 
 <script>
@@ -279,7 +251,6 @@ if (!token) window.location.href = 'login.html';
 
 let currentPage = 1;
 let searchTimer = null;
-let modalUserId = null;
 
 function logout(){ localStorage.removeItem('bj_token'); localStorage.removeItem('bj_user'); window.location.href='login.html'; }
 function showToast(msg, ok=true){ const t=document.getElementById('toast'); t.textContent=msg; t.style.color=ok?'#4cff91':'#ff6b6b'; t.style.borderColor=ok?'rgba(76,255,145,.3)':'rgba(255,68,68,.2)'; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2500); }
@@ -291,7 +262,6 @@ function showPage(name) {
   document.getElementById('nav-'+name).classList.add('active');
   if (name==='dashboard')   loadStats();
   if (name==='users')       loadUsers(1);
-  if (name==='verification') loadVerification();
   if (name==='banned')      loadBanned();
   if (name==='tournaments') loadTournaments();
   if (name==='campaigns')   {} // no auto-load needed
@@ -306,8 +276,6 @@ async function loadStats() {
     document.getElementById('statsGrid').innerHTML = `
       <div class="stat-box"><div class="stat-box-val blue">${d.totalUsers}</div><div class="stat-box-label">Total Players</div></div>
       <div class="stat-box"><div class="stat-box-val">${d.signupsToday}</div><div class="stat-box-label">Joined Today</div></div>
-      <div class="stat-box"><div class="stat-box-val green">${d.verified}</div><div class="stat-box-label">Verified</div></div>
-      <div class="stat-box"><div class="stat-box-val" style="color:#ffd764">${d.pending}</div><div class="stat-box-label">Pending Review</div></div>
       <div class="stat-box"><div class="stat-box-val red">${d.banned}</div><div class="stat-box-label">Banned</div></div>
       <div class="stat-box"><div class="stat-box-val green">$${Number(d.totalBalance||0).toLocaleString()}</div><div class="stat-box-label">Total Chips in Play</div></div>
       <div class="stat-box"><div class="stat-box-val blue">$${Number(d.totalWagered||0).toLocaleString()}</div><div class="stat-box-label">Total Wagered</div></div>
@@ -331,7 +299,7 @@ async function loadUsers(page=1) {
         <td style="font-family:'Crimson Text',serif;font-size:12px;">${esc(u.email)}</td>
         <td style="color:#4cff91;">$${u.balance.toLocaleString()}</td>
         <td><span class="badge vip-${u.vip_tier}">${u.vip_tier}</span></td>
-        <td><span class="badge badge-${u.is_banned?'banned':u.verify_status}">${u.is_banned?'BANNED':u.verify_status}</span></td>
+        <td><span class="badge badge-${u.is_banned?'banned':'verified'}">${u.is_banned?'BANNED':'ACTIVE'}</span></td>
         <td>${u.total_hands}</td>
         <td style="font-size:11px;">${new Date(u.created_at).toLocaleDateString()}</td>
         <td style="display:flex;gap:6px;flex-wrap:wrap;">
@@ -359,64 +327,6 @@ async function banUser(id, ban, username) {
     else showToast('Action failed', false);
   } catch { showToast('Server error', false); }
 }
-
-// ── VERIFICATION ──────────────────────────────────────
-async function loadVerification() {
-  const body = document.getElementById('verifyBody');
-  body.innerHTML = '<tr class="loading-row"><td colspan="6"><span class="spinner"></span>Loading...</td></tr>';
-  try {
-    const res = await fetch(`${API}/admin/users?page=1&search=`, {headers:{Authorization:'Bearer '+token}});
-    const d = await res.json();
-    const pending = d.users.filter(u => u.verify_status==='pending' || u.verify_status==='verified' || u.verify_status==='rejected');
-    if (!pending.length) { body.innerHTML='<tr class="empty-row"><td colspan="6">No verification submissions yet</td></tr>'; return; }
-    body.innerHTML = pending.map(u => `
-      <tr>
-        <td class="username">${esc(u.username)}</td>
-        <td style="font-family:'Crimson Text',serif;font-size:12px;">${esc(u.email)}</td>
-        <td style="font-family:'Crimson Text',serif;">—</td>
-        <td style="font-size:11px;">${new Date(u.created_at).toLocaleDateString()}</td>
-        <td><span class="badge badge-${u.verify_status}">${u.verify_status}</span></td>
-        <td><button class="btn btn-view" onclick="openVerifyModal(${u.id},'${esc(u.username)}')">Review ID</button></td>
-      </tr>`).join('');
-  } catch { showToast('Failed to load', false); }
-}
-
-async function openVerifyModal(userId, username) {
-  modalUserId = userId;
-  document.getElementById('modalUsername').textContent = `Review: ${username}`;
-  document.getElementById('modalContent').innerHTML = '<div style="text-align:center;padding:20px;"><span class="spinner"></span> Loading documents...</div>';
-  document.getElementById('verifyModal').classList.remove('hidden');
-  try {
-    const res = await fetch(`${API}/admin/verification/${userId}`, {headers:{Authorization:'Bearer '+token}});
-    const d = await res.json();
-    const dob = d.date_of_birth ? new Date(d.date_of_birth).toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'}) : '—';
-    document.getElementById('modalContent').innerHTML = `
-      <div class="id-info"><strong>Email:</strong> ${esc(d.email)}</div>
-      <div class="id-info"><strong>Date of Birth:</strong> ${dob}</div>
-      <div class="id-info" style="margin-bottom:16px;"><strong>Status:</strong> <span class="badge badge-${d.verify_status}">${d.verify_status}</span></div>
-      <div class="id-images">
-        <div class="id-img-wrap">
-          <div class="id-img-label">🪪 Government ID</div>
-          ${d.id_document ? `<img src="${d.id_document}" alt="ID Document"/>` : '<div style="padding:40px;text-align:center;color:rgba(255,255,255,.3);">No document uploaded</div>'}
-        </div>
-        <div class="id-img-wrap">
-          <div class="id-img-label">🤳 Selfie Photo</div>
-          ${d.selfie_photo ? `<img src="${d.selfie_photo}" alt="Selfie"/>` : '<div style="padding:40px;text-align:center;color:rgba(255,255,255,.3);">No selfie uploaded</div>'}
-        </div>
-      </div>`;
-  } catch { document.getElementById('modalContent').innerHTML='<p style="color:#ff6b6b;font-family:Crimson Text,serif;">Failed to load documents.</p>'; }
-}
-
-async function verifyAction(action) {
-  if (!modalUserId) return;
-  try {
-    const res = await fetch(`${API}/admin/users/${modalUserId}/verify`, {method:'PUT',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:JSON.stringify({action})});
-    if (res.ok) { showToast(action==='approve'?'User approved ✓':'User rejected'); closeModal(); loadVerification(); }
-    else showToast('Action failed', false);
-  } catch { showToast('Server error', false); }
-}
-
-function closeModal() { document.getElementById('verifyModal').classList.add('hidden'); modalUserId=null; }
 
 // ── BANNED ────────────────────────────────────────────
 async function loadBanned() {
