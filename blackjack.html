@@ -263,6 +263,21 @@
     .action-row .btn-split,.action-row .btn-double{display:none;}
   }
 </style>
+<style>
+  .challenge-panel{position:fixed;z-index:490;right:12px;top:62px;width:min(380px,calc(100vw - 24px));padding:20px;
+    border:1px solid rgba(255,215,100,.45);border-radius:10px;background:#170f09;color:#f8e7b2;
+    box-shadow:0 8px 35px #000c;font-family:Georgia,serif}
+  .challenge-panel.hidden{display:none}
+  .challenge-heading{font-size:16px;display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+  .challenge-heading button{color:#f5db92;background:none;border:0;font-size:24px;cursor:pointer}
+  .challenge-row{display:flex;gap:9px;align-items:center;justify-content:space-between;padding:8px 0;border-top:1px solid #49351c}
+  .challenge-label{font-size:13px;line-height:1.5}
+  .challenge-row button{border:1px solid #80632b;border-radius:4px;background:#d3af55;
+    color:#160d05;padding:8px;font-size:11px;min-width:90px;cursor:pointer}
+  .challenge-row button:disabled{opacity:.45;cursor:not-allowed}
+  .challenge-note{font-size:11px;color:#b2a080;margin-bottom:12px}
+  @media (prefers-reduced-motion:reduce) {*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+</style>
 </head>
 <body>
 
@@ -288,6 +303,8 @@
     <div class="nav-btns">
       <button class="icon-btn" id="voiceBtn" title="Dealer Voice" onclick="toggleVoice()">🔊</button>
       <button class="icon-btn" id="ambienceBtn" title="Casino Ambience" onclick="toggleAmbience()">🎰</button>
+      <button class="icon-btn" id="muteBtn" title="Mute all game audio" onclick="toggleMute()" aria-label="Mute all sounds">🔉</button>
+      <button class="icon-btn" title="Daily challenges" onclick="toggleChallengePanel()" aria-label="Daily challenges">🎯</button>
     </div>
     <a class="nav-link" href="multiplayer.html">🃏 Multiplayer</a>
     <a class="nav-link" href="tournament.html">🏆 Tournaments</a>
@@ -300,6 +317,13 @@
     </button>
   </div>
 </nav>
+
+<section id="challengePanel" class="challenge-panel hidden" aria-label="Daily challenges">
+  <div class="challenge-heading">🎯 DAILY CHALLENGES
+    <button type="button" onclick="toggleChallengePanel()" aria-label="Close challenges">×</button>
+  </div>
+  <div id="challengeContent">Complete server-verified hands to earn bonus chips.</div>
+</section>
 
 <!-- Stats panel -->
 <div class="stats-panel">
@@ -547,6 +571,7 @@ function sendSticker(emoji) {
 
 // ── CHIP SOUNDS ────────────────────────────────────
 function playChipSound() {
+  if (localStorage.getItem('bj_mute')==='1') return;
   try {
     if (audioCtx.state === 'suspended') audioCtx.resume();
     const sound = equippedCosmetics.chip_sound || 'classic';
@@ -595,13 +620,25 @@ let voiceEnabled = false, ambienceEnabled = false, ambienceNode = null;
 const synth = window.speechSynthesis;
 
 function speak(text) {
-  if (!voiceEnabled) return;
+  if (!voiceEnabled || localStorage.getItem('bj_mute')==='1') return;
   synth.cancel();
   const u = new SpeechSynthesisUtterance(text);
   u.rate = 0.85; u.pitch = 0.75; u.volume = 0.9;
   synth.speak(u);
 }
 
+function toggleMute(){
+  const muted=localStorage.getItem('bj_mute')!=='1';
+  localStorage.setItem('bj_mute',muted?'1':'0');
+  const btn=document.getElementById('muteBtn');
+  btn.textContent=muted?'🔇':'🔉';
+  btn.setAttribute('aria-label',muted?'Unmute game audio':'Mute all game audio');
+  if(muted){stopAmbience();synth.cancel();}
+  else if(ambienceEnabled)startAmbience();
+}
+if(localStorage.getItem('bj_mute')==='1'){
+  document.getElementById('muteBtn').textContent='🔇';
+}
 function toggleVoice() {
   voiceEnabled = !voiceEnabled;
   document.getElementById('voiceBtn').classList.toggle('active', voiceEnabled);
@@ -616,7 +653,7 @@ function toggleAmbience() {
 }
 
 function startAmbience() {
-  if (ambienceNode) return;
+  if (ambienceNode || localStorage.getItem('bj_mute')==='1') return;
   const bufferSize = audioCtx.sampleRate * 3;
   const buffer = audioCtx.createBuffer(2, bufferSize, audioCtx.sampleRate);
   for (let ch=0;ch<2;ch++) { const d=buffer.getChannelData(ch); for (let i=0;i<bufferSize;i++) d[i]=(Math.random()*2-1)*0.04; }
@@ -634,6 +671,7 @@ function stopAmbience() {
 }
 
 function playTone(type) {
+  if (localStorage.getItem('bj_mute')==='1') return;
   try {
     if (audioCtx.state === 'suspended') audioCtx.resume();
     const osc = audioCtx.createOscillator(), g = audioCtx.createGain();
@@ -1084,6 +1122,7 @@ buildShoe(6); loadUser(); loadCosmetics(); setStatus('Place your bet and deal');
 document.addEventListener('click',()=>{if(audioCtx.state==='suspended') audioCtx.resume();},{once:true});
 </script>
 <script src="solo-client.js"></script>
+<script src="challenges-client.js"></script>
 <script src="cookie-banner.js"></script>
 </body>
 </html>
