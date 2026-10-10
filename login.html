@@ -224,7 +224,25 @@
     else { input.type = 'password'; btn.textContent = '👁'; }
   }
 
-  if (localStorage.getItem('bj_token')) window.location.href = 'blackjack.html';
+  // Never trust an old token just because it exists in localStorage.
+  // A password reset invalidates old tokens, so verify before redirecting.
+  async function resumeValidSession() {
+    const existing=localStorage.getItem('bj_token');
+    if(!existing) return;
+    try {
+      const response=await fetch(`${API}/me`,{
+        headers:{Authorization:'Bearer '+existing}
+      });
+      if(localStorage.getItem('bj_token')!==existing) return;
+      if(response.ok){
+        window.location.replace('blackjack.html');
+      }else if(response.status===401||response.status===403){
+        localStorage.removeItem('bj_token');
+        localStorage.removeItem('bj_user');
+      }
+    }catch{ /* Leave login form usable if the backend is temporarily offline. */ }
+  }
+  resumeValidSession();
 
   // Floating background cards
   const suits = ['♠','♥','♦','♣'];
@@ -283,8 +301,22 @@
       });
       const data = await res.json();
       if (!res.ok) { errEl.textContent = data.error; return; }
-      localStorage.setItem('bj_token', data.token);
-      localStorage.setItem('bj_user', JSON.stringify(data.user));
+      // Validate the freshly issued session before navigating to the table.
+      // Previously a successful password check could still produce a token that
+      // the game rejected, trapping players in a login-to-table redirect loop.
+      const session=await fetch(`${API}/me`,{
+        headers:{Authorization:'Bearer '+data.token}
+      });
+      if(!session.ok){
+        const details=await session.json().catch(()=>({}));
+        errEl.textContent=session.status===401
+          ? 'Your password was accepted, but the server rejected the session. The account has not been changed. Please contact the site owner.'
+          : details.error||'Unable to verify your session right now. Please try again.';
+        return;
+      }
+      const freshUser=await session.json();
+      localStorage.setItem('bj_token',data.token);
+      localStorage.setItem('bj_user',JSON.stringify(freshUser));
       window.location.href = 'blackjack.html';
     } catch { errEl.textContent = 'Cannot connect to server. Is it running?'; }
     finally { btn.disabled = false; btn.textContent = 'Enter the Table'; }

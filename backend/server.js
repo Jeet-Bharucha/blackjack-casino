@@ -8,6 +8,7 @@ const jwt        = require('jsonwebtoken');
 const path       = require('path');
 const crypto     = require('crypto');
 const soloGame   = require('./solo-engine');
+const { version: sessionVersion, sessionMatches } = require('./session-utils');
 require('dotenv').config();
 
 // ── EMAIL (Resend) ────────────────────────────────────
@@ -428,6 +429,19 @@ async function connectDB() {
     try { await db.execute(sql); } catch (e) { /* column already exists — ignore */ }
   }
 
+  // The old migration loop ignores failures; explicitly verify this required column.
+  const [versionRows] = await db.query(
+    "SELECT COUNT(*) AS present FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='users' AND column_name='token_version'"
+  );
+  if (!Number(versionRows[0]?.present)) {
+    await db.query("ALTER TABLE users ADD COLUMN token_version INT NOT NULL DEFAULT 0");
+  }
+  const [verifiedVersion] = await db.query(
+    "SELECT COUNT(*) AS present FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='users' AND column_name='token_version'"
+  );
+  if (!Number(verifiedVersion[0]?.present))
+    throw new Error('Required users.token_version column is missing');
+
   dbReady = true;
   console.log('✅ MySQL connected and tables ready');
 }
@@ -502,14 +516,20 @@ const VIP_PERKS = {
 // ── AUTH MIDDLEWARE ───────────────────────────────────
 async function auth(req, res, next) {
   const token=req.headers.authorization?.split(' ')[1];
-  if(!token)return res.status(401).json({error:'No token'});
+  if(!token) return res.status(401).json({error:'No token'});
+  let claims;
+  try { claims=jwt.verify(token, JWT_SECRET); }
+  catch { return res.status(401).json({error:'Session expired. Please sign in again.'}); }
   try {
-    const user=jwt.verify(token,JWT_SECRET);
-    const [rows]=await db.execute('SELECT is_banned,token_version FROM users WHERE id=?',[user.id]);
-    if(!rows.length||rows[0].is_banned||(rows[0].token_version||0)!==(user.v||0))
-      return res.status(401).json({error:'Session is no longer valid'});
-    req.user=user;next();
-  }catch(e){res.status(401).json({error:'Session is no longer valid'});}
+    const [rows]=await db.execute('SELECT is_banned,token_version FROM users WHERE id=?',[claims.id]);
+    if(!rows.length || !sessionMatches(rows[0],claims))
+      return res.status(401).json({error:'Session expired. Please sign in again.'});
+  } catch(err) {
+    console.error('Session validation database error:',err.code||err.message);
+    return res.status(503).json({error:'Session validation is temporarily unavailable. Try again in a moment.'});
+  }
+  req.user=claims;
+  return next();
 }
 function verifyToken(token) {
   try { return jwt.verify(token, JWT_SECRET); } catch { return null; }
@@ -645,7 +665,7 @@ app.post('/api/login', throttle(15, 15 * 60 * 1000), async (req, res) => {
       const until = new Date(u.self_excluded_until).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
       return res.status(403).json({ error: `You have self-excluded until ${until}. This is for your wellbeing.` });
     }
-    const token = jwt.sign({ id: u.id, username: u.username, v: u.token_version||0 }, JWT_SECRET, { expiresIn: '7d' });
+    const token = jwt.sign({ id: u.id, username: u.username, v: sessionVersion(u.token_version) ?? 0 }, JWT_SECRET, { expiresIn: '7d' });
     res.json({ token, user: publicUser(u) });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
 });
@@ -889,12 +909,19 @@ app.post('/api/daily-bonus', auth, throttle(30,10*60*1000), async(req,res)=>{
 async function adminAuth(req, res, next) {
   const token = req.headers.authorization?.split(' ')[1];
   if (!token) return res.status(401).json({ error: 'No token' });
+  let claims;
+  try { claims=jwt.verify(token,JWT_SECRET); }
+  catch { return res.status(401).json({error:'Session expired'}); }
   try {
-    const payload = jwt.verify(token, JWT_SECRET);
-    const [rows] = await db.execute('SELECT is_admin,is_banned,token_version FROM users WHERE id=?', [payload.id]);
-    if (!rows.length || !rows[0].is_admin || rows[0].is_banned || (rows[0].token_version||0)!==(payload.v||0)) return res.status(403).json({ error: 'Admin access required' });
-    req.user = payload; next();
-  } catch { res.status(401).json({ error: 'Invalid token' }); }
+    const [rows]=await db.execute('SELECT is_admin,is_banned,token_version FROM users WHERE id=?',[claims.id]);
+    if(!rows.length||!rows[0].is_admin||!sessionMatches(rows[0],claims))
+      return res.status(403).json({error:'Admin access required'});
+  } catch(error) {
+    console.error('Admin session lookup error:',error.code||error.message);
+    return res.status(503).json({error:'Authentication temporarily unavailable'});
+  }
+  req.user=claims;
+  return next();
 }
 
 // ── ADMIN ROUTES ──────────────────────────────────────
@@ -1308,7 +1335,7 @@ async function joinSocketTable(socket,tableId,token,inviteCode){
   let name=u.username,avatar=null;
   try{
     const [rows]=await db.execute('SELECT username,display_name,avatar,is_banned,token_version FROM users WHERE id=?',[u.id]);
-    if(!rows.length||rows[0].is_banned||(rows[0].token_version||0)!==(u.v||0))return socket.emit('error_msg','Session expired or account unavailable');
+    if(!rows.length||!sessionMatches(rows[0],u))return socket.emit('error_msg','Session expired or account unavailable');
     name=rows[0].display_name||u.username;
     avatar=rows[0].avatar;
   }catch(e){return socket.emit('error_msg','Unable to load account');}
