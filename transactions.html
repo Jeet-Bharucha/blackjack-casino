@@ -67,7 +67,7 @@
 <div class="page">
   <div class="page-header">
     <div class="page-title">Transaction History</div>
-    <div class="page-sub">Your chip purchases and cosmetic purchases</div>
+    <div class="page-sub">Your virtual-chip cosmetic purchases</div>
   </div>
   <div id="content">
     <div class="loading"><div class="spinner"></div>Loading transactions...</div>
@@ -100,17 +100,16 @@ async function loadTransactions() {
         <div class="empty-state">
           <div class="empty-icon">🧾</div>
           <div class="empty-title">No Transactions Yet</div>
-          <div class="empty-sub">Your chip purchases and cosmetic purchases will appear here.</div>
+          <div class="empty-sub">Your virtual-chip cosmetic purchases will appear here.</div>
         </div>`;
       return;
     }
 
     const rows = data.map(tx => {
-      const isChip = tx.type === 'chip_purchase';
-      const icon = isChip ? '🛒' : '🎨';
-      const amountSign = isChip ? '+' : '-';
-      const amountClass = isChip ? 'positive' : 'negative';
-      const typeLabel = isChip ? 'Chip Purchase' : 'Cosmetic';
+      const icon = '🎨';
+      const amountSign = '-';
+      const amountClass = 'negative';
+      const typeLabel = 'Cosmetic';
       return `<tr>
         <td class="tx-icon">${icon}</td>
         <td><div class="tx-desc">${String(tx.description||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')}</div><div class="tx-type">${typeLabel}</div></td>
