@@ -1319,18 +1319,31 @@ io.on('connection',socket=>{
   socket.emit('table_list',getTableList());
   socket.on('auth',({token}={})=>{const u=verifyToken(token);if(u)socketToUser.set(socket.id,u);});
   socket.on('get_tables',()=>socket.emit('table_list',getTableList()));
-  socket.on('create_table',({name,token,isPrivate}={})=>{
+  socket.on('create_table',(payload={})=>{
+    const {name,token,isPrivate}=payload||{};
     const u=verifyToken(token); if(!u)return socket.emit('error_msg','Not authenticated');
     if(socketToTable.has(socket.id))return socket.emit('error_msg','Already at a table');
+    if(tables.size>=100)return socket.emit('error_msg','Too many tables. Try again later.');
+    if(Array.from(tables.values()).some(t=>t.ownerId===u.id && !t.seats.some(Boolean)))
+      return socket.emit('error_msg','You already have an unjoined table.');
     const safeName=typeof name==='string' ? name.trim().slice(0,36) : '';
     const t=createTable(safeName||u.username+"'s Table",isPrivate===true);
-    tables.set(t.id,t);broadcastTableList();
+    t.ownerId=u.id;
+    tables.set(t.id,t);
+    // Remove unused invitation codes/tables that were created but never joined.
+    setTimeout(()=>{
+      if(tables.get(t.id)===t && !t.seats.some(Boolean)){
+        tables.delete(t.id);broadcastTableList();
+      }
+    },5*60*1000).unref();broadcastTableList();
     socket.emit('table_created',{tableId:t.id,inviteCode:t.inviteCode});
   });
-  socket.on('join_table',({tableId,token,inviteCode}={})=>{
+  socket.on('join_table',(payload={})=>{
+    const {tableId,token,inviteCode}=payload||{};
     joinSocketTable(socket,tableId,token,inviteCode);
   });
-  socket.on('join_private',({inviteCode,token}={})=>{
+  socket.on('join_private',(payload={})=>{
+    const {inviteCode,token}=payload||{};
     const code=typeof inviteCode==='string'?inviteCode.trim().toLowerCase():'';
     const table=Array.from(tables.values()).find(t=>t.isPrivate&&t.inviteCode===code);
     if(!table)return socket.emit('error_msg','Invite is invalid or the table has closed');
@@ -1343,11 +1356,11 @@ io.on('connection',socket=>{
     seat.ready=true;broadcastTable(t);
     if(t.seats.filter(s=>s?.ready).length>=2){t.phase='betting';startBetTimer(t);broadcastTable(t);}
   });
-  socket.on('place_bet',({amount})=>{ const tableId=socketToTable.get(socket.id); if(!tableId) return; const table=tables.get(tableId); if(!table||table.phase!=='betting') return; const seat=table.seats.find(s=>s?.socketId===socket.id); if(!seat) return; if(!Number.isSafeInteger(amount)||amount<1||amount>seat.balance) return socket.emit('error_msg','Invalid bet'); seat.bet=amount; seat.hasBet=true; io.to(tableId).emit('game_message',{text:`${seat.displayName||seat.username} bet $${amount}`,type:'bet'}); broadcastTable(table); });
+  socket.on('place_bet',(payload={})=>{const amount=payload?.amount; const tableId=socketToTable.get(socket.id); if(!tableId) return; const table=tables.get(tableId); if(!table||table.phase!=='betting') return; const seat=table.seats.find(s=>s?.socketId===socket.id); if(!seat) return; if(!Number.isSafeInteger(amount)||amount<1||amount>seat.balance) return socket.emit('error_msg','Invalid bet'); seat.bet=amount; seat.hasBet=true; io.to(tableId).emit('game_message',{text:`${seat.displayName||seat.username} bet $${amount}`,type:'bet'}); broadcastTable(table); });
   socket.on('mp_hit',()=>{ const tableId=socketToTable.get(socket.id); if(!tableId) return; const table=tables.get(tableId); if(!table||table.phase!=='playing') return; const si=table.seats.findIndex(s=>s?.socketId===socket.id); if(si!==table.currentSeat) return; const seat=table.seats[si]; const hand=seat.hands[seat.activeHand]; hand.cards.push(drawCard(table.shoe)); const total=handTotal(hand.cards); broadcastTable(table); if(total>=21){hand.done=true;if(seat.activeHand+1<seat.hands.length){seat.activeHand++;}else{seat.done=true;clearTimers(table);nextPlayerTurn(table,si+1);}} });
   socket.on('mp_stand',()=>{ const tableId=socketToTable.get(socket.id); if(!tableId) return; const table=tables.get(tableId); if(!table||table.phase!=='playing') return; const si=table.seats.findIndex(s=>s?.socketId===socket.id); if(si!==table.currentSeat) return; const seat=table.seats[si]; seat.hands[seat.activeHand].done=true; clearTimers(table); if(seat.activeHand+1<seat.hands.length){seat.activeHand++;nextPlayerTurn(table,si);}else{seat.done=true;nextPlayerTurn(table,si+1);} });
   socket.on('mp_double',()=>{ const tableId=socketToTable.get(socket.id); if(!tableId) return; const table=tables.get(tableId); if(!table||table.phase!=='playing') return; const si=table.seats.findIndex(s=>s?.socketId===socket.id); if(si!==table.currentSeat) return; const seat=table.seats[si]; if(seat.balance<seat.bet) return socket.emit('error_msg','Insufficient balance'); const hand=seat.hands[seat.activeHand]; if(hand.cards.length!==2) return; seat.balance-=hand.bet; hand.bet*=2; hand.doubled=true; hand.cards.push(drawCard(table.shoe)); hand.done=true; seat.done=true; broadcastTable(table); clearTimers(table); nextPlayerTurn(table,si+1); });
-  socket.on('send_chat',({message})=>{ const tableId=socketToTable.get(socket.id); if(!tableId) return; const table=tables.get(tableId); if(!table||!message?.trim()) return; const u=socketToUser.get(socket.id); const msg={username:u?.username||'Guest',message:message.trim().slice(0,120),time:Date.now()}; table.chat.push(msg); io.to(tableId).emit('new_chat',msg); });
+  socket.on('send_chat',(payload={})=>{const message=payload?.message; const tableId=socketToTable.get(socket.id); if(!tableId) return; const table=tables.get(tableId); if(!table||!message?.trim()) return; const u=socketToUser.get(socket.id); const msg={username:u?.username||'Guest',message:message.trim().slice(0,120),time:Date.now()}; table.chat.push(msg); io.to(tableId).emit('new_chat',msg); });
   socket.on('leave_table',()=>leaveTable(socket));
   socket.on('disconnect',()=>leaveTable(socket));
   function leaveTable(socket){ const tableId=socketToTable.get(socket.id); if(!tableId) return; const table=tables.get(tableId); if(table){const si=table.seats.findIndex(s=>s?.socketId===socket.id); if(si!==-1){const name=table.seats[si].displayName||table.seats[si].username; table.seats[si]=null; io.to(tableId).emit('game_message',{text:`${name} left`,type:'leave'}); if(!table.seats.some(Boolean)){clearTimers(table);tables.delete(tableId);}else{broadcastTable(table);}}} socket.leave(tableId); socketToTable.delete(socket.id); socketToUser.delete(socket.id); broadcastTableList(); }
