@@ -276,6 +276,9 @@
     color:#160d05;padding:8px;font-size:11px;min-width:90px;cursor:pointer}
   .challenge-row button:disabled{opacity:.45;cursor:not-allowed}
   .challenge-note{font-size:11px;color:#b2a080;margin-bottom:12px}
+  @keyframes verifiedDeal {from{opacity:.3;transform:translateY(-18px) scale(.9)}to{opacity:1;transform:translateY(0) scale(1)}}
+  .solo-card-appear{animation:verifiedDeal .32s cubic-bezier(.2,.8,.2,1) backwards}
+  @media(prefers-reduced-motion:reduce){.solo-card-appear{animation:none}}
   @media (prefers-reduced-motion:reduce) {*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
 </style>
 </head>
@@ -288,6 +291,8 @@
   <a class="nav-link" href="leaderboard.html">Leaderboard</a>
   <a class="nav-link" href="profile.html">👤 Profile</a>
   <a class="nav-link" href="responsible.html">🛡️ Responsible Play</a>
+  <span class="nav-link" onclick="toggleChallengePanel();toggleMobileMenu()">🎯 Daily Challenges</span>
+  <span class="nav-link" onclick="toggleMute();toggleMobileMenu()">🔉 Toggle Sound</span>
   <span class="nav-link" onclick="logout()">Sign Out</span>
 </div>
 
