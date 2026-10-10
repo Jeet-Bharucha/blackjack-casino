@@ -233,6 +233,7 @@
       const response=await fetch(`${API}/me`,{
         headers:{Authorization:'Bearer '+existing}
       });
+      if(localStorage.getItem('bj_token')!==existing) return;
       if(response.ok){
         window.location.replace('blackjack.html');
       }else if(response.status===401||response.status===403){
