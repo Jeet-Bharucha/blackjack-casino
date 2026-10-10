@@ -850,35 +850,32 @@ app.get('/api/verify-payment', auth, async (req, res) => {
 });
 
 // ── DAILY BONUS ───────────────────────────────────────
-app.post('/api/daily-bonus', auth, async (req, res) => {
-  try {
-    const [rows] = await db.execute('SELECT * FROM users WHERE id=?', [req.user.id]);
-    if (!rows.length) return res.status(404).json({ error: 'Not found' });
-    const u = rows[0];
-    const today = new Date().toISOString().slice(0,10);
-    const lastBonus = u.last_daily_bonus ? u.last_daily_bonus.toISOString().slice(0,10) : null;
-    const lastSlotDate = u.last_bonus_slot_date ? u.last_bonus_slot_date.toISOString().slice(0,10) : null;
-
-    // First claim of the day
-    if (lastBonus !== today) {
-      const yesterday = new Date(Date.now()-86400000).toISOString().slice(0,10);
-      const newStreak = lastBonus === yesterday ? u.streak + 1 : 1;
-      const bonus = getDailyBonus(newStreak, u.vip_tier);
-      await db.execute('UPDATE users SET balance=balance+?, streak=?, last_daily_bonus=? WHERE id=?', [bonus, newStreak, today, u.id]);
-      const [updated] = await db.execute('SELECT balance FROM users WHERE id=?', [u.id]);
-      return res.json({ bonus, newBalance: updated[0].balance, streak: newStreak, isSecondClaim: false });
-    }
-
-    // Second claim — only if user has bonus_slot perk and hasn't used it today
-    if (u.has_bonus_slot && lastSlotDate !== today) {
-      const bonus = getDailyBonus(u.streak, u.vip_tier);
-      await db.execute('UPDATE users SET balance=balance+?, last_bonus_slot_date=? WHERE id=?', [bonus, today, u.id]);
-      const [updated] = await db.execute('SELECT balance FROM users WHERE id=?', [u.id]);
-      return res.json({ bonus, newBalance: updated[0].balance, streak: u.streak, isSecondClaim: true });
-    }
-
-    return res.status(400).json({ error: 'Already claimed today' });
-  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
+app.post('/api/daily-bonus', auth, throttle(30,10*60*1000), async(req,res)=>{
+  const conn=await db.getConnection();
+  try{
+    await conn.beginTransaction();
+    const [[u]]=await conn.execute('SELECT * FROM users WHERE id=? FOR UPDATE',[req.user.id]);
+    if(!u)throw clientError('Account not found',404);
+    const today=new Date().toISOString().slice(0,10);
+    const normalize=date=>date?new Date(date).toISOString().slice(0,10):null;
+    const lastBonus=normalize(u.last_daily_bonus);
+    const lastSlot=normalize(u.last_bonus_slot_date);
+    let bonus=0,streak=u.streak,second=false;
+    if(lastBonus!==today){
+      const yesterday=new Date(Date.now()-86400000).toISOString().slice(0,10);
+      streak=lastBonus===yesterday?u.streak+1:1;
+      bonus=getDailyBonus(streak,u.vip_tier);
+      await conn.execute('UPDATE users SET balance=balance+?,streak=?,last_daily_bonus=? WHERE id=?',
+        [bonus,streak,today,u.id]);
+    }else if(u.has_bonus_slot&&lastSlot!==today){
+      bonus=getDailyBonus(streak,u.vip_tier);second=true;
+      await conn.execute('UPDATE users SET balance=balance+?,last_bonus_slot_date=? WHERE id=?',
+        [bonus,today,u.id]);
+    }else throw clientError('Already claimed today');
+    await conn.commit();
+    return res.json({bonus,newBalance:u.balance+bonus,streak,isSecondClaim:second});
+  }catch(e){await conn.rollback();return soloError(res,e);}
+  finally{conn.release();}
 });
 
 // ── ADMIN MIDDLEWARE ──────────────────────────────────
