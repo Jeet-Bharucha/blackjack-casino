@@ -130,20 +130,6 @@
   .tier-label{font-size:8px;color:rgba(255,215,100,.5);letter-spacing:1px;}
   .tier-pts{font-size:8px;color:rgba(255,255,255,.3);font-family:'Crimson Text',serif;}
 
-  /* BUY CHIPS MODAL */
-  .buy-modal-box{background:rgba(10,5,0,.98);border:2px solid rgba(255,215,100,.4);border-radius:14px;padding:30px 36px;text-align:center;box-shadow:0 0 80px rgba(0,0,0,.9);min-width:320px;}
-  .buy-modal-title{font-size:22px;color:#ffd764;letter-spacing:3px;margin-bottom:6px;}
-  .buy-modal-sub{font-size:12px;color:rgba(255,255,255,.4);font-family:'Crimson Text',serif;margin-bottom:24px;}
-  .buy-packages{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px;}
-  .buy-pkg{background:rgba(255,255,255,.04);border:1px solid rgba(255,215,100,.2);border-radius:8px;padding:14px 10px;cursor:pointer;transition:all .2s;}
-  .buy-pkg:hover{border-color:rgba(255,215,100,.6);background:rgba(255,215,100,.08);transform:translateY(-2px);}
-  .buy-pkg.popular{border-color:rgba(255,215,100,.5);background:rgba(255,215,100,.06);}
-  .buy-pkg-badge{font-size:8px;letter-spacing:2px;background:#ffd764;color:#1a0a00;padding:2px 6px;border-radius:3px;margin-bottom:6px;display:inline-block;}
-  .buy-pkg-coins{font-size:22px;font-weight:700;color:#4cff91;font-family:'Playfair Display',serif;}
-  .buy-pkg-price{font-size:11px;color:rgba(255,255,255,.4);font-family:'Crimson Text',serif;margin-top:2px;}
-  .btn-cancel-buy{background:transparent;border:1px solid rgba(255,255,255,.1);color:rgba(255,255,255,.4);padding:8px 20px;font-family:'Cinzel',serif;font-size:10px;letter-spacing:2px;border-radius:4px;cursor:pointer;transition:all .2s;}
-  .btn-cancel-buy:hover{border-color:rgba(255,255,255,.3);color:rgba(255,255,255,.7);}
-
   /* RESULT POPUP */
   .result-overlay{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:100;pointer-events:none;}
   .result-popup{background:rgba(10,5,0,.96);border:2px solid rgba(255,215,100,.4);border-radius:12px;padding:26px 44px;text-align:center;transform:scale(.7);opacity:0;transition:all .4s cubic-bezier(.2,.8,.4,1);pointer-events:auto;box-shadow:0 0 60px rgba(0,0,0,.8);}
@@ -254,8 +240,6 @@
     .result-popup{padding:20px 28px;}
     .result-title{font-size:22px;letter-spacing:2px;}
     .result-amount{font-size:20px;}
-    .buy-modal-box{min-width:unset;width:90vw;padding:22px 20px;}
-    .buy-packages{grid-template-columns:1fr 1fr;}
   }
 
   @media(max-width:400px){
@@ -386,7 +370,7 @@
       <div class="chip chip-25"  onclick="placeBet(25)">$25</div>
       <div class="chip chip-100" onclick="placeBet(100)">$100</div>
       <button class="btn btn-clear" onclick="clearBet()">Clear</button>
-      <button class="btn btn-buy-chips" type="button" onclick="showToast('Real-money purchases are disabled. Earn free chips with the daily bonus!')">Free Play ♠</button>
+      <span class="btn btn-buy-chips" title="Chips have no cash value. Earn more with daily bonuses.">♠ Free Play Only</span>
     </div>
     <div class="action-row">
       <button class="btn btn-deal"   id="dealBtn"   onclick="startDeal()">Deal</button>
@@ -395,34 +379,6 @@
       <button class="btn btn-double" id="doubleBtn" onclick="doubleDown()" disabled>Double</button>
       <button class="btn btn-split"  id="splitBtn"  onclick="split()"      disabled>Split</button>
     </div>
-  </div>
-</div>
-
-<!-- Buy Chips Modal -->
-<div class="modal-overlay hidden" id="buyChipsModal">
-  <div class="buy-modal-box">
-    <div class="buy-modal-title">💰 Buy Chips</div>
-    <div class="buy-modal-sub" id="buyModalSub">Add chips to keep playing</div>
-    <div class="buy-packages">
-      <div class="buy-pkg" onclick="buyChips('starter')">
-        <div class="buy-pkg-coins">$500</div>
-        <div class="buy-pkg-price">Starter Pack</div>
-      </div>
-      <div class="buy-pkg popular" onclick="buyChips('popular')">
-        <div class="buy-pkg-badge">POPULAR</div>
-        <div class="buy-pkg-coins">$1,000</div>
-        <div class="buy-pkg-price">Popular Pack</div>
-      </div>
-      <div class="buy-pkg" onclick="buyChips('big')">
-        <div class="buy-pkg-coins">$2,500</div>
-        <div class="buy-pkg-price">Big Spender</div>
-      </div>
-      <div class="buy-pkg" onclick="buyChips('mega')">
-        <div class="buy-pkg-coins">$5,000</div>
-        <div class="buy-pkg-price">Mega Pack</div>
-      </div>
-    </div>
-    <button class="btn-cancel-buy" onclick="closeBuyModal()">Maybe Later</button>
   </div>
 </div>
 
@@ -1078,26 +1034,6 @@ function showResultPopup(cls,title,sub,profit){
   amt.style.color=profit>0?'#4cff91':profit<0?'#ff4444':'#ffd764';
   popup.className=`result-popup ${cls}`;
   setTimeout(()=>popup.classList.add('show'),400);
-}
-
-function openBuyModal(){ document.getElementById('buyModalSub').textContent='Add chips to your balance'; document.getElementById('buyChipsModal').classList.remove('hidden'); }
-function closeBuyModal(){ document.getElementById('buyChipsModal').classList.add('hidden'); }
-
-async function buyChips(pkg){
-  closeBuyModal();
-  showToast('Opening payment...');
-  try {
-    const res=await fetch(`${API}/buy-coins`,{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:JSON.stringify({package:pkg})});
-    if(!res.ok){ showToast('Purchase failed. Try again.'); return; }
-    const d=await res.json();
-    if(d.devMode){
-      // Stripe not configured — chips added free (dev mode)
-      balance=d.balance; updateUI(); showToast(`+$${d.added} chips added! (dev mode)`);
-    } else if(d.checkoutUrl){
-      // Redirect to Stripe Checkout
-      window.location.href=d.checkoutUrl;
-    }
-  } catch { showToast('Cannot connect to server.'); }
 }
 
 function nextRound(){
