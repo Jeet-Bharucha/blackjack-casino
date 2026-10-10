@@ -1176,18 +1176,20 @@ app.post('/api/challenges/claim',auth,throttle(30,10*60*1000),async(req,res)=>{
 });
 app.get('/api/leaderboard/season',async(req,res)=>{
   try {
-    const [rows]=await db.execute(`SELECT u.username,u.display_name,u.avatar,u.vip_tier,
-      u.equipped_badge,u.equipped_name_color,u.balance,
-      COUNT(r.round_id) as total_hands,COALESCE(SUM(r.net),0) as points,
-      COALESCE(SUM(CASE WHEN r.result IN ('win','dealer_bust','blackjack','double_win','split_win')
-        THEN 1 ELSE 0 END),0) as wins,
-      COALESCE(SUM(CASE WHEN r.result IN ('lose','bust') THEN 1 ELSE 0 END),0) as losses,
-      COALESCE(SUM(CASE WHEN r.result='blackjack' THEN 1 ELSE 0 END),0) as blackjacks
-    FROM solo_results r JOIN users u ON r.user_id=u.id
-    WHERE r.played_at >= DATE_FORMAT(UTC_TIMESTAMP(),'%Y-%m-01')
-    GROUP BY u.id,u.username,u.display_name,u.avatar,u.vip_tier,
-             u.equipped_badge,u.equipped_name_color,u.balance
-    ORDER BY points DESC,wins DESC LIMIT 10`);
+    const [rows]=await db.execute(`SELECT u.username,u.display_name,u.avatar,
+      u.vip_tier,u.equipped_badge,u.equipped_name_color,u.balance,
+      r.total_hands,r.points,r.wins,r.losses,r.blackjacks
+    FROM (
+      SELECT user_id,COUNT(*) as total_hands,
+        COALESCE(SUM(net),0) as points,
+        COALESCE(SUM(CASE WHEN result IN ('win','dealer_bust','blackjack','double_win','split_win')
+          THEN 1 ELSE 0 END),0) as wins,
+        COALESCE(SUM(CASE WHEN result IN ('lose','bust') THEN 1 ELSE 0 END),0) as losses,
+        COALESCE(SUM(CASE WHEN result='blackjack' THEN 1 ELSE 0 END),0) as blackjacks
+      FROM solo_results WHERE played_at>=DATE_FORMAT(UTC_TIMESTAMP(),'%Y-%m-01')
+      GROUP BY user_id ORDER BY points DESC,wins DESC LIMIT 10
+    ) r JOIN users u ON u.id=r.user_id
+    ORDER BY r.points DESC,r.wins DESC`);
     res.json(rows.map((r,i)=>({rank:i+1,username:r.username,displayName:r.display_name||r.username,
       avatar:r.avatar,balance:r.balance,vipTier:r.vip_tier,equippedBadge:r.equipped_badge,
       equippedNameColor:r.equipped_name_color,points:Number(r.points),
