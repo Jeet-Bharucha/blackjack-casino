@@ -29,9 +29,8 @@
   function refreshControls() {
     if(pending)return;
     const st=lastState;
-    if(!st||!st.active||st.phase==='finished'){
-      enableBetting(true);return;
-    }
+    if(!st||!st.active){enableBetting(!!balance);return;}
+    if(st.phase==='finished'){enableBetting(false);return;}
     if(st.phase==='insurance'){
       enableBetting(false);
       document.getElementById('insuranceSub').textContent =
