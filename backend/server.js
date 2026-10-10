@@ -6,6 +6,7 @@ const mysql      = require('mysql2/promise');
 const bcrypt     = require('bcryptjs');
 const jwt        = require('jsonwebtoken');
 const path       = require('path');
+const crypto     = require('crypto');
 require('dotenv').config();
 
 // ── EMAIL (Resend) ────────────────────────────────────
@@ -18,16 +19,16 @@ if (process.env.RESEND_API_KEY) {
 }
 
 async function sendEmail({ to, subject, html }) {
-  if (!resendApiKey) return;
+  if (!resendApiKey) return false;
   try {
-    const res = await fetch('https://api.resend.com/emails', {
+    const response = await fetch('https://api.resend.com/emails', {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${resendApiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ from: 'Blackjack Casino <onboarding@resend.dev>', to, subject, html }),
+      headers: { Authorization: `Bearer ${resendApiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from: process.env.EMAIL_FROM || 'Blackjack Casino <onboarding@resend.dev>', to, subject, html }),
     });
-    if (!res.ok) { const e = await res.json(); console.warn('Resend error:', e.message); }
-    else console.log('✅ Email sent to', to);
-  } catch (e) { console.warn('Email send failed:', e.message); }
+    if (!response.ok) { console.warn('Resend response:', response.status); return false; }
+    return true;
+  } catch (e) { console.warn('Email sending failed:', e.message); return false; }
 }
 
 function receiptEmailHTML({ username, chips, amount, newBalance, pkg }) {
@@ -83,7 +84,33 @@ const stripe = process.env.STRIPE_SECRET_KEY && !process.env.STRIPE_SECRET_KEY.i
   : null;
 if (!stripe) console.warn('⚠️  Stripe not configured — set STRIPE_SECRET_KEY in .env');
 
-app.use(cors());
+app.set('trust proxy', 1);
+const allowedOrigins = (process.env.FRONTEND_ORIGINS ||
+  'https://blackjack-casino-inky.vercel.app,https://blackjack-casino-nob6.onrender.com')
+  .split(',').map(x => x.trim()).filter(Boolean);
+app.use(cors({ origin(origin, cb) {
+  return cb(null, !origin || allowedOrigins.includes(origin));
+} }));
+const requestCounters = new Map();
+function throttle(maxAttempts, windowMs) {
+  return (req, res, next) => {
+    const key = req.path + ':' + req.ip, now = Date.now();
+    const bucket = requestCounters.get(key);
+    if (!bucket || bucket.expires <= now) {
+      requestCounters.set(key, { count: 1, expires: now + windowMs });
+    } else {
+      if (bucket.count >= maxAttempts) {
+        res.set('Retry-After', String(Math.ceil((bucket.expires-now)/1000)));
+        return res.status(429).json({ error: 'Too many attempts. Please try again later.' });
+      }
+      bucket.count++;
+    }
+    if (requestCounters.size > 5000) {
+      for (const [k, v] of requestCounters) if (v.expires < now) requestCounters.delete(k);
+    }
+    next();
+  };
+}
 
 // Stripe webhook needs raw body — must be registered BEFORE express.json()
 app.post('/api/stripe-webhook', express.raw({ type: 'application/json' }), async (req, res) => {
@@ -508,12 +535,12 @@ async function checkAndUnlockAchievements(userId, u, result, bet, newBalance) {
 }
 
 // ── AUTH ROUTES ───────────────────────────────────────
-app.post('/api/register', async (req, res) => {
+app.post('/api/register', throttle(8, 60 * 60 * 1000), async (req, res) => {
   try {
     const { username, email, password, dateOfBirth } = req.body;
     if (!username || !email || !password) return res.status(400).json({ error: 'All fields required' });
     if (username.length < 3 || username.length > 20) return res.status(400).json({ error: 'Username must be 3–20 characters' });
-    if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' });
+    if (password.length < 10 || password.length > 128) return res.status(400).json({ error: 'Password must be 10–128 characters' });
 
     // Self-reported age gate: 21+ only. This does not verify identity.
     if (typeof dateOfBirth !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(dateOfBirth)) {
@@ -564,7 +591,7 @@ app.post('/api/register', async (req, res) => {
   } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
 });
 
-app.post('/api/login', async (req, res) => {
+app.post('/api/login', throttle(15, 15 * 60 * 1000), async (req, res) => {
   try {
     const { email, password } = req.body;
     const [rows] = await db.execute('SELECT * FROM users WHERE email=?', [email?.toLowerCase()]);
@@ -582,40 +609,50 @@ app.post('/api/login', async (req, res) => {
 });
 
 // ── FORGOT / RESET PASSWORD ───────────────────────────
-const resetCodes = new Map(); // email -> { code, expires }
-
-app.post('/api/forgot-password', async (req, res) => {
+// Codes are delivered by email only, never displayed by the API.
+const resetCodes = new Map();
+app.post('/api/forgot-password', throttle(5, 15 * 60 * 1000), async (req, res) => {
+  const generic = { success: true, message: 'If the account exists, a reset code will be emailed.' };
   try {
-    const { email } = req.body;
-    if (!email) return res.status(400).json({ error: 'Email required' });
-    const [rows] = await db.execute('SELECT id, username FROM users WHERE email=?', [email.toLowerCase()]);
-    if (!rows.length) return res.status(400).json({ error: 'No account found with that email' });
-
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
-    const expires = Date.now() + 15 * 60 * 1000; // 15 minutes
-    resetCodes.set(email.toLowerCase(), { code, expires, userId: rows[0].id });
-
-    // In a real app this code would be emailed. We return it so the local app works.
-    res.json({ success: true, resetCode: code, message: 'Reset code generated (shown here since no email service is configured)' });
-  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
+    const email = typeof req.body.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+    if (!email || email.length > 254) return res.status(400).json({ error: 'Valid email required' });
+    if (!resendApiKey) return res.status(503).json({ error: 'Password reset email is not configured. Contact the site owner.' });
+    const [rows] = await db.execute('SELECT id FROM users WHERE email=?', [email]);
+    if (rows.length) {
+      const code = String(crypto.randomInt(100000, 1000000));
+      const delivered = await sendEmail({
+        to: email, subject: 'Your Blackjack Casino password reset code',
+        html: `<p>Your reset code is <strong>${code}</strong>. It expires in 15 minutes. If you did not request this, ignore this email.</p>`,
+      });
+      if (delivered) resetCodes.set(email, {
+        hash: crypto.createHash('sha256').update(code).digest('hex'),
+        expires: Date.now() + 15 * 60 * 1000, userId: rows[0].id, attempts: 0,
+      });
+    }
+    return res.json(generic);
+  } catch (e) { console.error('Reset request failed:', e.message); return res.status(500).json({ error: 'Unable to process reset request' }); }
 });
-
-app.post('/api/reset-password', async (req, res) => {
+app.post('/api/reset-password', throttle(10, 15 * 60 * 1000), async (req, res) => {
   try {
     const { email, code, newPassword } = req.body;
-    if (!email || !code || !newPassword) return res.status(400).json({ error: 'All fields required' });
-    if (newPassword.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' });
-
-    const entry = resetCodes.get(email.toLowerCase());
-    if (!entry) return res.status(400).json({ error: 'No reset code found. Please request a new one.' });
-    if (Date.now() > entry.expires) { resetCodes.delete(email.toLowerCase()); return res.status(400).json({ error: 'Reset code expired. Please request a new one.' }); }
-    if (entry.code !== code.trim()) return res.status(400).json({ error: 'Incorrect reset code' });
-
+    if (typeof email !== 'string' || typeof code !== 'string' || typeof newPassword !== 'string')
+      return res.status(400).json({ error: 'Email, code and new password required' });
+    if (newPassword.length < 10 || newPassword.length > 128)
+      return res.status(400).json({ error: 'Password must be 10–128 characters' });
+    const key = email.trim().toLowerCase(), entry = resetCodes.get(key);
+    if (!entry || entry.expires < Date.now() || entry.attempts >= 5) {
+      resetCodes.delete(key);
+      return res.status(400).json({ error: 'Invalid or expired reset code' });
+    }
+    entry.attempts++;
+    const actual = crypto.createHash('sha256').update(code.trim()).digest();
+    if (!crypto.timingSafeEqual(actual, Buffer.from(entry.hash, 'hex')))
+      return res.status(400).json({ error: 'Invalid or expired reset code' });
+    resetCodes.delete(key);
     const hash = await bcrypt.hash(newPassword, 10);
     await db.execute('UPDATE users SET password=? WHERE id=?', [hash, entry.userId]);
-    resetCodes.delete(email.toLowerCase());
-    res.json({ success: true, message: 'Password updated successfully' });
-  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
+    return res.json({ success: true });
+  } catch (e) { console.error('Password reset failed:', e.message); return res.status(500).json({ error: 'Unable to reset password' }); }
 });
 
 app.get('/api/me', auth, async (req, res) => {
@@ -696,6 +733,8 @@ const CHIP_PACKAGES = {
 };
 
 app.post('/api/buy-coins', auth, async (req, res) => {
+  if (process.env.ENABLE_REAL_MONEY_PURCHASES !== 'true' || !stripe)
+    return res.status(503).json({ error: 'Paid chip purchases are disabled for free-play mode.' });
   const { package: pkg } = req.body;
   const pack = CHIP_PACKAGES[pkg];
   if (!pack) return res.status(400).json({ error: 'Invalid package' });
@@ -1240,6 +1279,8 @@ app.post('/api/use-referral', auth, async (req, res) => {
 
 // ── SUBSCRIPTION / VIP PASS ($4.99/month) ────────────
 app.post('/api/subscribe', auth, async (req, res) => {
+  if (process.env.ENABLE_REAL_MONEY_PURCHASES !== 'true' || !stripe)
+    return res.status(503).json({ error: 'Paid subscriptions are disabled for free-play mode.' });
   if (!stripe) {
     await db.execute('UPDATE users SET balance=balance+500 WHERE id=?', [req.user.id]);
     const [upd] = await db.execute('SELECT balance FROM users WHERE id=?', [req.user.id]);
