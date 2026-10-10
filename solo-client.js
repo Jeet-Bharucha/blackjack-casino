@@ -19,7 +19,7 @@
       });
       const data=await res.json();
       if(!res.ok)throw Error(data.error||'Unable to play hand');
-      updateTable(data);
+      await updateTable(data, {animate: true});
       return data;
     } catch(error){
       showToast(error.message);
@@ -42,6 +42,11 @@
     document.getElementById('hitBtn').disabled=false;
     document.getElementById('standBtn').disabled=false;
   }
+  // Server returns the whole dealt hand at once, but the player should see
+  // cards leave the shoe ONE AT A TIME, like the original animated table.
+  // This is presentation only: cards and payouts still come from the backend.
+  const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
+
   function renderDealer(st) {
     const el=document.getElementById('dealerHand');
     el.querySelectorAll('.card-wrapper').forEach(card=>card.remove());
@@ -49,13 +54,101 @@
       const concealed=card.rank==='?';
       const wrapper=buildCardEl(concealed?{rank:'?',suit:'♠'}:card,concealed);
       wrapper.classList.remove('dealing');
+      wrapper.style.animation='none'; // Restored/unchanged cards must not re-deal.
       el.appendChild(wrapper);
     });
     const badge=document.getElementById('dealerScore');
     badge.textContent=handTotal(st.dealerCards.filter(c=>c.rank!=='?'));
     badge.style.display='';
   }
-  function updateTable(st) {
+
+  // The initial sequence is player, dealer, player, dealer (face-down).
+  // Keep all action buttons disabled until the four cards have arrived.
+  async function dealOpeningCards(st) {
+    const row=document.getElementById('handsRow');
+    row.replaceChildren();
+    const dealerHand=document.getElementById('dealerHand');
+    dealerHand.querySelectorAll('.card-wrapper').forEach(card=>card.remove());
+    const dealerScore=document.getElementById('dealerScore');
+    dealerScore.style.display='none';
+
+    const group=document.createElement('div');
+    group.className='hand-group';
+    const playerHand=document.createElement('div');
+    playerHand.className='hand active-hand';
+    playerHand.id='playerHand0';
+    const score=document.createElement('span');
+    score.className='score-badge';
+    score.id='playerScore0';
+    score.style.display='none';
+    playerHand.appendChild(score);
+    group.appendChild(playerHand);
+    row.appendChild(group);
+
+    setStatus('Dealing cards...');
+    await addCardToEl(playerHand, st.hands[0].cards[0]);
+    await addCardToEl(dealerHand, st.dealerCards[0]);
+    await addCardToEl(playerHand, st.hands[0].cards[1]);
+    // Only the back of the dealer's hole card is visible before settlement.
+    const hole=st.dealerCards[1] || {rank:'?',suit:'?'};
+    await addCardToEl(dealerHand, hole, true);
+
+    updateHandEl(playerHand,st.hands[0].cards);
+    dealerScore.textContent=handTotal([st.dealerCards[0]]);
+    dealerScore.style.display='';
+  }
+
+  // Reveal the dealer's hole card and any additional hits in order. This also
+  // works if the backend resolves a natural Blackjack on the initial deal.
+  async function showDealerSettlement(st,alreadyDealt=false) {
+    const el=document.getElementById('dealerHand');
+    const dealerScore=document.getElementById('dealerScore');
+    let hole;
+    if(alreadyDealt) {
+      hole=el.querySelectorAll('.card-wrapper')[1];
+    } else {
+      el.querySelectorAll('.card-wrapper').forEach(card=>card.remove());
+      for(let i=0;i<Math.min(2,st.dealerCards.length);i++){
+        const card=buildCardEl(st.dealerCards[i],i===1);
+        card.classList.remove('dealing');
+        card.style.animation='none';
+        el.appendChild(card);
+      }
+      hole=el.querySelectorAll('.card-wrapper')[1];
+      dealerScore.textContent=handTotal(st.dealerCards.slice(0,1));
+      dealerScore.style.display='';
+    }
+    if(hole){
+      await pause(220);
+      await flipCard(hole);
+      dealerScore.textContent=handTotal(st.dealerCards.slice(0,2));
+    }
+    for(let i=2;i<st.dealerCards.length;i++){
+      await addCardToEl(el,st.dealerCards[i]);
+      dealerScore.textContent=handTotal(st.dealerCards.slice(0,i+1));
+    }
+  }
+
+  // Restore and unchanged cards render immediately. Newly drawn cards on Hit,
+  // Double or Split receive an appearance animation, but are never re-dealt.
+  function renderPlayerState(st,previous,animate) {
+    renderPlayerHands();
+    document.querySelectorAll('#handsRow .hand-group').forEach((group,i)=>{
+      const previousCount=previous && st.hands.length===previous.hands.length
+        ? (previous.hands[i]?.cards.length || 0) : 0;
+      group.querySelectorAll('.card-wrapper').forEach((card,j)=>{
+        card.style.animation='none';
+        if(animate && previous && j>=previousCount){
+          const offset=(i*2+j-previousCount)*170;
+          card.style.animation='verifiedDeal .38s cubic-bezier(.2,.8,.2,1) both';
+          card.style.animationDelay=offset+'ms';
+          playTone('deal');
+        }
+      });
+    });
+  }
+
+  async function updateTable(st,{animate=false}={}) {
     const previous=lastState?.roundId===st.roundId ? lastState : null;
     lastState=st;
     balance=st.balance;
@@ -66,17 +159,19 @@
     dealerCards=st.dealerCards;
     gamePhase=st.phase==='finished'?'done':'player';
     updateUI();
-    renderPlayerHands();
-    document.querySelectorAll('#handsRow .hand-group').forEach((group,i)=>{
-      const oldCount=previous?.hands[i]?.cards.length||0;
-      group.querySelectorAll('.card-wrapper').forEach((card,j)=>{
-        if(j>=oldCount){
-          card.classList.add('solo-card-appear');
-          card.style.animationDelay=(j-oldCount)*100+'ms';
-        }
-      });
-    });
-    renderDealer(st);
+
+    const openingDeal=animate && !previous && st.hands.length===1
+      && st.hands[0].cards.length>=2 && st.dealerCards.length>=2;
+    if(openingDeal) {
+      await dealOpeningCards(st);
+      if(st.phase==='finished') await showDealerSettlement(st,true);
+    } else {
+      renderPlayerState(st,previous,animate);
+      if(animate && previous && st.phase==='finished' && previous.phase!=='finished')
+        await showDealerSettlement(st);
+      else renderDealer(st);
+    }
+
     document.getElementById('insuranceModal').classList.toggle('hidden',st.phase!=='insurance');
     if(st.phase==='finished'&&st.outcome){
       const out=st.outcome,won=out.net>0;
@@ -98,7 +193,7 @@
     const res=await fetch(root+'/solo/state',{headers:{Authorization:'Bearer '+token}});
     if(!res.ok)throw Error('Unable to restore your game');
     const st=await res.json();
-    if(st.active)updateTable(st);
+    if(st.active)await updateTable(st);
     else { lastState=st; balance=st.balance;gamePhase='bet';currentBet=0;updateUI();refreshControls(); }
   }
   window.startDeal=async function(){
