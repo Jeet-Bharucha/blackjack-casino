@@ -73,7 +73,8 @@ const server = http.createServer(app);
 const io     = new Server(server, { cors: { origin: '*' } });
 
 const PORT       = process.env.PORT       || 4000;
-const JWT_SECRET = process.env.JWT_SECRET || 'blackjack_secret';
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) throw new Error('JWT_SECRET environment variable must be set');
 
 // ── STRIPE ────────────────────────────────────────────
 const Stripe = require('stripe');
@@ -163,13 +164,19 @@ app.use(express.static(path.join(__dirname, '..')));
 
 // ── MYSQL ─────────────────────────────────────────────
 let db;
+let dbReady = false;
 async function connectDB() {
+  const dbHost = process.env.DB_HOST || 'localhost';
+  // TiDB Cloud Starter requires TLS on its public endpoint. Other MySQL
+  // providers can opt into TLS with DB_SSL=true.
+  const useTls = dbHost.toLowerCase().endsWith('.tidbcloud.com') || process.env.DB_SSL === 'true';
   db = await mysql.createPool({
-    host: process.env.DB_HOST || 'localhost',
+    host: dbHost,
     port: process.env.DB_PORT || 3306,
     user: process.env.DB_USER || 'root',
     password: process.env.DB_PASSWORD || '',
     database: process.env.DB_NAME || 'blackjack',
+    ssl: useTls ? { minVersion: 'TLSv1.2', rejectUnauthorized: true } : undefined,
     waitForConnections: true,
     connectionLimit: 10,
   });
@@ -382,9 +389,22 @@ async function connectDB() {
     try { await db.execute(sql); } catch (e) { /* column already exists — ignore */ }
   }
 
+  dbReady = true;
   console.log('✅ MySQL connected and tables ready');
 }
 connectDB().catch(err => console.error('❌ MySQL connection failed:', err.message));
+
+// Simple, non-sensitive database health check for deployment verification.
+app.get('/api/health', async (req, res) => {
+  if (!dbReady) return res.status(503).json({ status: 'unavailable' });
+  try {
+    await db.query('SELECT 1');
+    res.json({ status: 'ok' });
+  } catch (err) {
+    console.error('Health check failed:', err.message);
+    res.status(503).json({ status: 'unavailable' });
+  }
+});
 
 // ── TIER SYSTEM (points = total_won) ─────────────────
 const TIERS = [
