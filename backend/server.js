@@ -420,7 +420,7 @@ const ACHIEVEMENTS = {
   win_streak_3:    { name: 'Hot Streak',     desc: 'Win 3 hands in a row',        icon: '🔥' },
   win_streak_5:    { name: 'On Fire',        desc: 'Win 5 hands in a row',        icon: '💥' },
   win_streak_10:   { name: 'Unstoppable',    desc: 'Win 10 hands in a row',       icon: '👑' },
-  high_roller:     { name: 'High Roller',    desc: 'Win with a $100+ bet',        icon: '💰' },
+  high_roller:     { name: 'High Roller',    desc: 'Win with a 100+ chip bet',        icon: '💰' },
   comeback:        { name: 'Comeback Kid',   desc: 'Win when nearly broke',       icon: '💪' },
   veteran_100:     { name: 'Veteran',        desc: 'Play 100 hands',              icon: '🎖️' },
   veteran_500:     { name: 'Elite',          desc: 'Play 500 hands',              icon: '🏆' },
@@ -532,9 +532,14 @@ async function checkAndUnlockAchievements(userId, u, result, bet, newBalance) {
 app.post('/api/register', throttle(8, 60 * 60 * 1000), async (req, res) => {
   try {
     const { username, email, password, dateOfBirth } = req.body;
-    if (!username || !email || !password) return res.status(400).json({ error: 'All fields required' });
-    if (username.length < 3 || username.length > 20) return res.status(400).json({ error: 'Username must be 3–20 characters' });
-    if (password.length < 10 || password.length > 128) return res.status(400).json({ error: 'Password must be 10–128 characters' });
+    if (typeof username!=='string' || typeof email!=='string' || typeof password!=='string')
+      return res.status(400).json({ error: 'Username, email and password required' });
+    if (!/^[A-Za-z0-9_]{3,20}$/.test(username))
+      return res.status(400).json({ error: 'Username must be 3–20 letters, numbers or underscores' });
+    if (email.length>254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+      return res.status(400).json({ error: 'Enter a valid email address' });
+    if (password.length < 10 || password.length > 128)
+      return res.status(400).json({ error: 'Password must be 10–128 characters' });
 
     // Self-reported age gate: 21+ only. This does not verify identity.
     if (typeof dateOfBirth !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(dateOfBirth)) {
@@ -570,7 +575,7 @@ app.post('/api/register', throttle(8, 60 * 60 * 1000), async (req, res) => {
         <h1 style="color:#ffd764;letter-spacing:4px;">Welcome, ${username}!</h1>
         <p style="color:rgba(255,255,255,.5);margin:16px 0;">Your account is ready! No government ID or selfie is requested to play.</p>
         <div style="background:rgba(76,255,145,.08);border:1px solid rgba(76,255,145,.3);border-radius:8px;padding:18px;margin:24px 0;">
-          <p style="color:#4cff91;font-size:24px;font-weight:700;margin:0;">$500 Free Chips</p>
+          <p style="color:#4cff91;font-size:24px;font-weight:700;margin:0;">500 Free Virtual Chips</p>
           <p style="color:rgba(255,255,255,.4);font-size:13px;margin-top:4px;">Available now</p>
         </div>
         <a href="${process.env.APP_URL}/blackjack.html" style="display:inline-block;padding:12px 32px;background:linear-gradient(135deg,#c9a227,#ffd764);color:#1a0a00;border-radius:6px;font-weight:700;letter-spacing:2px;text-decoration:none;">Play Blackjack →</a>
@@ -588,7 +593,9 @@ app.post('/api/register', throttle(8, 60 * 60 * 1000), async (req, res) => {
 app.post('/api/login', throttle(15, 15 * 60 * 1000), async (req, res) => {
   try {
     const { email, password } = req.body;
-    const [rows] = await db.execute('SELECT * FROM users WHERE email=?', [email?.toLowerCase()]);
+    if(typeof email!=='string'||typeof password!=='string'||email.length>254||password.length>128)
+      return res.status(400).json({ error: 'Invalid email or password' });
+    const [rows] = await db.execute('SELECT * FROM users WHERE email=?', [email.trim().toLowerCase()]);
     if (!rows.length) return res.status(400).json({ error: 'Invalid email or password' });
     const u = rows[0];
     if (!await bcrypt.compare(password, u.password)) return res.status(400).json({ error: 'Invalid email or password' });
@@ -705,7 +712,7 @@ app.delete('/api/account', auth, async (req, res) => {
         <div style="font-size:40px;margin-bottom:10px;">👋</div>
         <h1 style="color:#ffd764;letter-spacing:3px;">Account Deleted</h1>
         <p style="color:rgba(255,255,255,.5);margin:16px 0;">Hi ${u.username}, your account and all associated data have been permanently deleted.</p>
-        <p style="color:rgba(255,255,255,.3);font-size:12px;">Final balance was $${u.balance.toLocaleString()} chips.</p>
+        <p style="color:rgba(255,255,255,.3);font-size:12px;">Final virtual-chip balance was ${u.balance.toLocaleString()} chips.</p>
         <p style="color:rgba(255,255,255,.3);font-size:11px;margin-top:20px;">If you ever change your mind, you're welcome to create a new account.</p>
       </div>`,
     });
