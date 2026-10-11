@@ -8,6 +8,7 @@ const jwt        = require('jsonwebtoken');
 const path       = require('path');
 const crypto     = require('crypto');
 const soloGame   = require('./solo-engine');
+const { validateAvatar } = require('./avatar-utils');
 const { version: sessionVersion, sessionMatches } = require('./session-utils');
 require('dotenv').config();
 
@@ -27,6 +28,7 @@ async function sendEmail({ to, subject, html }) {
       method: 'POST',
       headers: { Authorization: `Bearer ${resendApiKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ from: process.env.EMAIL_FROM || 'Blackjack Casino <onboarding@resend.dev>', to, subject, html }),
+      signal: AbortSignal.timeout(10000),
     });
     if (!response.ok) { console.warn('Resend response:', response.status); return false; }
     return true;
@@ -74,9 +76,12 @@ function throttle(maxAttempts, windowMs) {
       }
       bucket.count++;
     }
-    if (requestCounters.size > 5000) {
-      for (const [k, v] of requestCounters) if (v.expires < now) requestCounters.delete(k);
+    // Keep the per-IP fallback throttle bounded; random IPs/paths must not
+    // grow the map forever or trigger a full sweep on every request.
+    if (requestCounters.size >= 5000 && requestCounters.size % 100 === 0) {
+      for (const [k, v] of requestCounters) if (v.expires <= now) requestCounters.delete(k);
     }
+    while (requestCounters.size > 10000) requestCounters.delete(requestCounters.keys().next().value);
     next();
   };
 }
@@ -672,15 +677,16 @@ app.put('/api/profile', auth, async (req, res) => {
     const updates = [], values = [];
 
     if (displayName !== undefined) {
-      if (displayName && (displayName.length < 2 || displayName.length > 30))
+      if (displayName !== null && (typeof displayName !== 'string' ||
+           (displayName && (displayName.length < 2 || displayName.length > 30))))
         return res.status(400).json({ error: 'Display name must be 2–30 characters' });
       updates.push('display_name = ?'); values.push(displayName || null);
     }
     if (avatar !== undefined) {
-      // Basic validation: must be a data URL or null
-      if (avatar && !avatar.startsWith('data:image/'))
-        return res.status(400).json({ error: 'Invalid image format' });
-      updates.push('avatar = ?'); values.push(avatar || null);
+      let safeAvatar;
+      try { safeAvatar = validateAvatar(avatar); }
+      catch (error) { return res.status(400).json({ error: error.message }); }
+      updates.push('avatar = ?'); values.push(safeAvatar);
     }
 
     if (!updates.length) return res.status(400).json({ error: 'Nothing to update' });
@@ -1099,7 +1105,9 @@ function createTable(name,isPrivate=false){ return {id:crypto.randomBytes(8).toS
   isPrivate,inviteCode:isPrivate?crypto.randomBytes(12).toString('hex'):null,
   seats:[null,null,null,null,null],phase:'waiting',shoe:buildShoe(),dealerCards:[],currentSeat:-1,betTimer:null,turnTimer:null,chat:[]}; }
 
-function tablePublicState(t){ return {id:t.id,name:t.name,phase:t.phase,isPrivate:t.isPrivate,inviteCode:t.inviteCode,currentSeat:t.currentSeat,dealerCards:t.phase==='playing'?[t.dealerCards[0],{rank:'?',suit:'?'}]:t.dealerCards,seats:t.seats.map(s=>s?{username:s.username,displayName:s.displayName||s.username,avatar:s.avatar,vipTier:s.vipTier||'Bronze',bet:s.bet,hasBet:s.hasBet,ready:s.ready,done:s.done,hands:s.hands,balance:s.balance,connected:!!s.socketId}:null),chat:t.chat.slice(-50),shoeSize:t.shoe.length}; }
+// Never re-transmit base64 avatars or chat history on every bet, hit and timer
+// update: clients render usernames/cards and receive chat as separate events.
+function tablePublicState(t){ return {id:t.id,name:t.name,phase:t.phase,isPrivate:t.isPrivate,inviteCode:t.inviteCode,currentSeat:t.currentSeat,dealerCards:t.phase==='playing'?[t.dealerCards[0],{rank:'?',suit:'?'}]:t.dealerCards,seats:t.seats.map(s=>s?{username:s.username,bet:s.bet,hasBet:s.hasBet,ready:s.ready,done:s.done,hands:s.hands,balance:s.balance,connected:!!s.socketId}:null),shoeSize:t.shoe.length}; }
 function getTableList(){ return Array.from(tables.values()).filter(t=>!t.isPrivate).map(t=>({id:t.id,name:t.name,phase:t.phase,playerCount:t.seats.filter(Boolean).length})); }
 function broadcastTableList(){ io.emit('table_list',getTableList()); }
 function broadcastTable(t){ io.to(t.id).emit('table_update',tablePublicState(t)); }
@@ -1186,22 +1194,21 @@ async function joinSocketTable(socket,tableId,token,inviteCode){
   if(freeSeat===-1)return socket.emit('error_msg','Table is full');
   if(returning===-1 && table.seats.some(seat=>seat&&seat.userId===u.id))
     return socket.emit('error_msg','Already seated at this table');
-  let name=u.username,avatar=null;
+  let name=u.username;
   try{
-    const [rows]=await db.execute('SELECT username,display_name,avatar,is_banned,token_version,self_excluded_until FROM users WHERE id=?',[u.id]);
+    const [rows]=await db.execute('SELECT username,display_name,is_banned,token_version,self_excluded_until FROM users WHERE id=?',[u.id]);
     if(!rows.length||!sessionMatches(rows[0],u))return socket.emit('error_msg','Session expired or account unavailable');
     if(rows[0].self_excluded_until && new Date(rows[0].self_excluded_until).getTime()>Date.now())
       return socket.emit('error_msg','Self-exclusion is active');
     name=rows[0].display_name||u.username;
-    avatar=rows[0].avatar;
   }catch(e){return socket.emit('error_msg','Unable to load account');}
   if(returning!==-1){
     const seat=table.seats[returning];
     if(seat.reconnectTimer){clearTimeout(seat.reconnectTimer);seat.reconnectTimer=null;}
     seat.socketId=socket.id;
-    seat.displayName=name; seat.avatar=avatar;
+    seat.displayName=name;
   } else {
-    table.seats[freeSeat]={socketId:socket.id,userId:u.id,username:u.username,displayName:name,avatar,
+    table.seats[freeSeat]={socketId:socket.id,userId:u.id,username:u.username,displayName:name,
       vipTier:'Bronze',balance:1000,bet:0,hasBet:false,ready:false,hands:[],activeHand:0,done:false};
   }
   socketToTable.set(socket.id,table.id);socketToUser.set(socket.id,u);
