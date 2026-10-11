@@ -305,6 +305,24 @@ socket.on('connect',()=>{
   if(currentPrivateInvite)socket.emit('join_private',{inviteCode:currentPrivateInvite,token});
   else if(currentTableId)socket.emit('join_table',{tableId:currentTableId,token});
   else if(inviteFromUrl)socket.emit('join_private',{inviteCode:inviteFromUrl,token});
+  else socket.emit('get_tables');
+});
+// Socket.IO reconnects automatically. While offline, do not leave betting or
+// action buttons usable — the server remains the source of truth.
+socket.on('disconnect',()=>{
+  myTurn=false;
+  enableActions(false);
+  disableChips();
+  document.getElementById('mpStatus').textContent='Connection lost · reconnecting…';
+  showToast('Connection interrupted. Reconnecting…');
+});
+let lastConnectNotice=0;
+socket.on('connect_error',()=>{
+  const now=Date.now();
+  if(now-lastConnectNotice>10000){
+    lastConnectNotice=now;
+    showToast('Unable to reach the table. Retrying…');
+  }
 });
 
 socket.on('table_list', tables => renderLobby(tables));
@@ -341,7 +359,13 @@ socket.on('round_results', ({ results, dealerTotal, dealerCards }) => {
   document.getElementById('mpBetDisplay').textContent = '0 chips';
   setTimeout(hideResults, 5500);
 });
-socket.on('error_msg', msg => showToast(msg));
+socket.on('error_msg', msg => {
+  showToast(msg);
+  if (/^Table not found$|^Invalid invite code$/.test(msg) && currentTableId) {
+    // The temporary table expired while offline. Safely return to the lobby.
+    leaveTable();
+  }
+});
 
 // ── LOBBY ───────────────────────────────────────────
 function requestTables() { socket.emit('get_tables'); }
