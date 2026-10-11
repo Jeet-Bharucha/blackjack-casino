@@ -40,6 +40,13 @@ const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) throw new Error('JWT_SECRET environment variable must be set');
 
 app.set('trust proxy', 1);
+app.disable('x-powered-by');
+// Never cache private account, round state or balance responses in intermediaries.
+app.use('/api',(req,res,next)=>{
+  res.set('Cache-Control','no-store');
+  res.set('X-Content-Type-Options','nosniff');
+  next();
+});
 const allowedOrigins = (process.env.FRONTEND_ORIGINS ||
   'https://blackjack-casino-inky.vercel.app,https://blackjack-casino-jeet-bharucha-s-projects.vercel.app,https://blackjack-casino-git-master-jeet-bharucha-s-projects.vercel.app,https://blackjack-casino-nob6.onrender.com')
   .split(',').map(x => x.trim()).filter(Boolean);
