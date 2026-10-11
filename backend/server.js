@@ -17,7 +17,7 @@ if (process.env.RESEND_API_KEY) {
   resendApiKey = process.env.RESEND_API_KEY;
   console.log('✅ Email (Resend) ready');
 } else {
-  console.warn('⚠️  Email not configured — set RESEND_API_KEY in Railway Variables');
+  console.warn('⚠️  Email not configured — set RESEND_API_KEY in Render Environment');
 }
 
 async function sendEmail({ to, subject, html }) {
@@ -35,16 +35,28 @@ async function sendEmail({ to, subject, html }) {
 
 const app    = express();
 const server = http.createServer(app);
-const io     = new Server(server, { cors: { origin: '*' } });
-
 const PORT       = process.env.PORT       || 4000;
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) throw new Error('JWT_SECRET environment variable must be set');
 
 app.set('trust proxy', 1);
+app.disable('x-powered-by');
+// Never cache private account, round state or balance responses in intermediaries.
+app.use('/api',(req,res,next)=>{
+  res.set('Cache-Control','no-store');
+  res.set('X-Content-Type-Options','nosniff');
+  next();
+});
 const allowedOrigins = (process.env.FRONTEND_ORIGINS ||
   'https://blackjack-casino-inky.vercel.app,https://blackjack-casino-jeet-bharucha-s-projects.vercel.app,https://blackjack-casino-git-master-jeet-bharucha-s-projects.vercel.app,https://blackjack-casino-nob6.onrender.com')
   .split(',').map(x => x.trim()).filter(Boolean);
+// Browser and socket transports use the same explicit origin allow-list.
+// Requests without an Origin (health probes, CLI clients) remain supported.
+const io = new Server(server,{
+  maxHttpBufferSize:100_000,
+  cors:{origin:allowedOrigins,methods:['GET','POST']},
+  allowRequest:(req, callback)=>callback(null,!req.headers.origin||allowedOrigins.includes(req.headers.origin))
+});
 app.use(cors({ origin(origin, cb) {
   return cb(null, !origin || allowedOrigins.includes(origin));
 } }));
@@ -70,7 +82,15 @@ function throttle(maxAttempts, windowMs) {
 }
 
 app.use(express.json({ limit: '5mb' })); // allow base64 avatar uploads
-app.use(express.static(path.join(__dirname, '..')));
+// Never serve backend source, logs, dependencies or security/configuration files
+// from the Render origin. Static gameplay assets at the web root remain available.
+app.use((req,res,next)=>{
+  if (/^\/(?:backend|node_modules|\.git|\.github)(?:\/|$)/i.test(req.path) ||
+      /(?:^|\/)(?:\.env(?:\..*)?|[^/]+\.(?:log|err))$/i.test(req.path))
+    return res.status(404).json({error:'Not found'});
+  next();
+});
+app.use(express.static(path.join(__dirname, '..'),{dotfiles:'ignore'}));
 
 // ── MYSQL ─────────────────────────────────────────────
 let db;
@@ -400,7 +420,7 @@ const ACHIEVEMENTS = {
   win_streak_3:    { name: 'Hot Streak',     desc: 'Win 3 hands in a row',        icon: '🔥' },
   win_streak_5:    { name: 'On Fire',        desc: 'Win 5 hands in a row',        icon: '💥' },
   win_streak_10:   { name: 'Unstoppable',    desc: 'Win 10 hands in a row',       icon: '👑' },
-  high_roller:     { name: 'High Roller',    desc: 'Win with a $100+ bet',        icon: '💰' },
+  high_roller:     { name: 'High Roller',    desc: 'Win with a 100+ chip bet',        icon: '💰' },
   comeback:        { name: 'Comeback Kid',   desc: 'Win when nearly broke',       icon: '💪' },
   veteran_100:     { name: 'Veteran',        desc: 'Play 100 hands',              icon: '🎖️' },
   veteran_500:     { name: 'Elite',          desc: 'Play 500 hands',              icon: '🏆' },
@@ -431,9 +451,11 @@ async function auth(req, res, next) {
   try { claims=jwt.verify(token, JWT_SECRET); }
   catch { return res.status(401).json({error:'Session expired. Please sign in again.'}); }
   try {
-    const [rows]=await db.execute('SELECT is_banned,token_version FROM users WHERE id=?',[claims.id]);
+    const [rows]=await db.execute('SELECT is_banned,token_version,self_excluded_until FROM users WHERE id=?',[claims.id]);
     if(!rows.length || !sessionMatches(rows[0],claims))
       return res.status(401).json({error:'Session expired. Please sign in again.'});
+    if(rows[0].self_excluded_until && new Date(rows[0].self_excluded_until).getTime()>Date.now())
+      return res.status(403).json({error:'Self-exclusion is active. You cannot play until the exclusion period ends.'});
   } catch(err) {
     console.error('Session validation database error:',err.code||err.message);
     return res.status(503).json({error:'Session validation is temporarily unavailable. Try again in a moment.'});
@@ -510,9 +532,14 @@ async function checkAndUnlockAchievements(userId, u, result, bet, newBalance) {
 app.post('/api/register', throttle(8, 60 * 60 * 1000), async (req, res) => {
   try {
     const { username, email, password, dateOfBirth } = req.body;
-    if (!username || !email || !password) return res.status(400).json({ error: 'All fields required' });
-    if (username.length < 3 || username.length > 20) return res.status(400).json({ error: 'Username must be 3–20 characters' });
-    if (password.length < 10 || password.length > 128) return res.status(400).json({ error: 'Password must be 10–128 characters' });
+    if (typeof username!=='string' || typeof email!=='string' || typeof password!=='string')
+      return res.status(400).json({ error: 'Username, email and password required' });
+    if (!/^[A-Za-z0-9_]{3,20}$/.test(username))
+      return res.status(400).json({ error: 'Username must be 3–20 letters, numbers or underscores' });
+    if (email.length>254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+      return res.status(400).json({ error: 'Enter a valid email address' });
+    if (password.length < 10 || password.length > 128)
+      return res.status(400).json({ error: 'Password must be 10–128 characters' });
 
     // Self-reported age gate: 21+ only. This does not verify identity.
     if (typeof dateOfBirth !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(dateOfBirth)) {
@@ -548,7 +575,7 @@ app.post('/api/register', throttle(8, 60 * 60 * 1000), async (req, res) => {
         <h1 style="color:#ffd764;letter-spacing:4px;">Welcome, ${username}!</h1>
         <p style="color:rgba(255,255,255,.5);margin:16px 0;">Your account is ready! No government ID or selfie is requested to play.</p>
         <div style="background:rgba(76,255,145,.08);border:1px solid rgba(76,255,145,.3);border-radius:8px;padding:18px;margin:24px 0;">
-          <p style="color:#4cff91;font-size:24px;font-weight:700;margin:0;">$500 Free Chips</p>
+          <p style="color:#4cff91;font-size:24px;font-weight:700;margin:0;">500 Free Virtual Chips</p>
           <p style="color:rgba(255,255,255,.4);font-size:13px;margin-top:4px;">Available now</p>
         </div>
         <a href="${process.env.APP_URL}/blackjack.html" style="display:inline-block;padding:12px 32px;background:linear-gradient(135deg,#c9a227,#ffd764);color:#1a0a00;border-radius:6px;font-weight:700;letter-spacing:2px;text-decoration:none;">Play Blackjack →</a>
@@ -566,7 +593,9 @@ app.post('/api/register', throttle(8, 60 * 60 * 1000), async (req, res) => {
 app.post('/api/login', throttle(15, 15 * 60 * 1000), async (req, res) => {
   try {
     const { email, password } = req.body;
-    const [rows] = await db.execute('SELECT * FROM users WHERE email=?', [email?.toLowerCase()]);
+    if(typeof email!=='string'||typeof password!=='string'||email.length>254||password.length>128)
+      return res.status(400).json({ error: 'Invalid email or password' });
+    const [rows] = await db.execute('SELECT * FROM users WHERE email=?', [email.trim().toLowerCase()]);
     if (!rows.length) return res.status(400).json({ error: 'Invalid email or password' });
     const u = rows[0];
     if (!await bcrypt.compare(password, u.password)) return res.status(400).json({ error: 'Invalid email or password' });
@@ -683,7 +712,7 @@ app.delete('/api/account', auth, async (req, res) => {
         <div style="font-size:40px;margin-bottom:10px;">👋</div>
         <h1 style="color:#ffd764;letter-spacing:3px;">Account Deleted</h1>
         <p style="color:rgba(255,255,255,.5);margin:16px 0;">Hi ${u.username}, your account and all associated data have been permanently deleted.</p>
-        <p style="color:rgba(255,255,255,.3);font-size:12px;">Final balance was $${u.balance.toLocaleString()} chips.</p>
+        <p style="color:rgba(255,255,255,.3);font-size:12px;">Final virtual-chip balance was ${u.balance.toLocaleString()} chips.</p>
         <p style="color:rgba(255,255,255,.3);font-size:11px;margin-top:20px;">If you ever change your mind, you're welcome to create a new account.</p>
       </div>`,
     });
@@ -805,12 +834,17 @@ app.post('/api/weekly-bonus', auth, async (req, res) => {
     const tier = rows[0].vip_tier || 'Bronze';
     const perks = VIP_PERKS[tier];
     if (!perks.weeklyBonus) return res.status(400).json({ error: 'Weekly bonus not available for your tier' });
-    const lastWeekly = rows[0].last_weekly_bonus;
-    if (lastWeekly && Date.now() - new Date(lastWeekly) < 7 * 86400000)
-      return res.status(400).json({ error: 'Weekly bonus already claimed' });
-    await db.execute('UPDATE users SET balance=balance+?, last_weekly_bonus=NOW() WHERE id=?', [perks.weeklyBonus, req.user.id]);
-    const [updated] = await db.execute('SELECT balance FROM users WHERE id=?', [req.user.id]);
-    res.json({ bonus: perks.weeklyBonus, newBalance: updated[0].balance, tier });
+    // Atomic conditional update: two simultaneous HTTP requests cannot both
+    // claim the same weekly reward, even across multiple Render workers.
+    const [claimed] = await db.execute(`
+      UPDATE users SET balance=balance+?, last_weekly_bonus=UTC_TIMESTAMP()
+      WHERE id=? AND vip_tier=?
+        AND (last_weekly_bonus IS NULL OR last_weekly_bonus<=DATE_SUB(UTC_TIMESTAMP(),INTERVAL 7 DAY))
+    `, [perks.weeklyBonus, req.user.id, tier]);
+    if (claimed.affectedRows !== 1)
+      return res.status(400).json({ error: 'Weekly bonus already claimed. Please refresh your perks.' });
+    const [[updated]] = await db.execute('SELECT balance FROM users WHERE id=?', [req.user.id]);
+    res.json({ bonus: perks.weeklyBonus, newBalance: updated.balance, tier });
   } catch { res.status(500).json({ error: 'Server error' }); }
 });
 
@@ -1065,7 +1099,7 @@ function createTable(name,isPrivate=false){ return {id:crypto.randomBytes(8).toS
   isPrivate,inviteCode:isPrivate?crypto.randomBytes(12).toString('hex'):null,
   seats:[null,null,null,null,null],phase:'waiting',shoe:buildShoe(),dealerCards:[],currentSeat:-1,betTimer:null,turnTimer:null,chat:[]}; }
 
-function tablePublicState(t){ return {id:t.id,name:t.name,phase:t.phase,isPrivate:t.isPrivate,inviteCode:t.inviteCode,currentSeat:t.currentSeat,dealerCards:t.phase==='playing'?[t.dealerCards[0],{rank:'?',suit:'?'}]:t.dealerCards,seats:t.seats.map(s=>s?{username:s.username,displayName:s.displayName||s.username,avatar:s.avatar,vipTier:s.vipTier||'Bronze',bet:s.bet,hasBet:s.hasBet,ready:s.ready,done:s.done,hands:s.hands,balance:s.balance}:null),chat:t.chat.slice(-50),shoeSize:t.shoe.length}; }
+function tablePublicState(t){ return {id:t.id,name:t.name,phase:t.phase,isPrivate:t.isPrivate,inviteCode:t.inviteCode,currentSeat:t.currentSeat,dealerCards:t.phase==='playing'?[t.dealerCards[0],{rank:'?',suit:'?'}]:t.dealerCards,seats:t.seats.map(s=>s?{username:s.username,displayName:s.displayName||s.username,avatar:s.avatar,vipTier:s.vipTier||'Bronze',bet:s.bet,hasBet:s.hasBet,ready:s.ready,done:s.done,hands:s.hands,balance:s.balance,connected:!!s.socketId}:null),chat:t.chat.slice(-50),shoeSize:t.shoe.length}; }
 function getTableList(){ return Array.from(tables.values()).filter(t=>!t.isPrivate).map(t=>({id:t.id,name:t.name,phase:t.phase,playerCount:t.seats.filter(Boolean).length})); }
 function broadcastTableList(){ io.emit('table_list',getTableList()); }
 function broadcastTable(t){ io.to(t.id).emit('table_update',tablePublicState(t)); }
@@ -1145,22 +1179,36 @@ async function joinSocketTable(socket,tableId,token,inviteCode){
   if(socketToTable.has(socket.id))return socket.emit('error_msg','Already at a table');
   const table=tables.get(tableId); if(!table)return socket.emit('error_msg','Table not found');
   if(table.isPrivate && inviteCode!==table.inviteCode)return socket.emit('error_msg','Invite code required');
-  const freeSeat=table.seats.findIndex(s=>s===null);if(freeSeat===-1)return socket.emit('error_msg','Table is full');
-  if(table.seats.some(s=>s&&s.userId===u.id))return socket.emit('error_msg','Already seated at this table');
+  // A connection drop keeps a practice-table seat reserved briefly, allowing
+  // the same verified user to resume their exact in-memory cards and chips.
+  const returning=table.seats.findIndex(seat=>seat?.userId===u.id&&!seat.socketId);
+  const freeSeat=returning!==-1?returning:table.seats.findIndex(seat=>seat===null);
+  if(freeSeat===-1)return socket.emit('error_msg','Table is full');
+  if(returning===-1 && table.seats.some(seat=>seat&&seat.userId===u.id))
+    return socket.emit('error_msg','Already seated at this table');
   let name=u.username,avatar=null;
   try{
-    const [rows]=await db.execute('SELECT username,display_name,avatar,is_banned,token_version FROM users WHERE id=?',[u.id]);
+    const [rows]=await db.execute('SELECT username,display_name,avatar,is_banned,token_version,self_excluded_until FROM users WHERE id=?',[u.id]);
     if(!rows.length||!sessionMatches(rows[0],u))return socket.emit('error_msg','Session expired or account unavailable');
+    if(rows[0].self_excluded_until && new Date(rows[0].self_excluded_until).getTime()>Date.now())
+      return socket.emit('error_msg','Self-exclusion is active');
     name=rows[0].display_name||u.username;
     avatar=rows[0].avatar;
   }catch(e){return socket.emit('error_msg','Unable to load account');}
-  table.seats[freeSeat]={socketId:socket.id,userId:u.id,username:u.username,displayName:name,avatar,
-    vipTier:'Bronze',balance:1000,bet:0,hasBet:false,ready:false,hands:[],activeHand:0,done:false};
+  if(returning!==-1){
+    const seat=table.seats[returning];
+    if(seat.reconnectTimer){clearTimeout(seat.reconnectTimer);seat.reconnectTimer=null;}
+    seat.socketId=socket.id;
+    seat.displayName=name; seat.avatar=avatar;
+  } else {
+    table.seats[freeSeat]={socketId:socket.id,userId:u.id,username:u.username,displayName:name,avatar,
+      vipTier:'Bronze',balance:1000,bet:0,hasBet:false,ready:false,hands:[],activeHand:0,done:false};
+  }
   socketToTable.set(socket.id,table.id);socketToUser.set(socket.id,u);
   socket.join(table.id);
-  socket.emit('joined_table',{tableId:table.id,seatIndex:freeSeat,balance:1000,
+  socket.emit('joined_table',{tableId:table.id,seatIndex:freeSeat,balance:table.seats[freeSeat].balance,
     isPrivate:table.isPrivate,inviteCode:table.isPrivate?table.inviteCode:null});
-  io.to(table.id).emit('game_message',{text:name+' joined',type:'join'});
+  io.to(table.id).emit('game_message',{text:name+(returning!==-1?' reconnected':' joined'),type:'join'});
   if(!table.isPrivate && table.phase==='waiting'){table.phase='betting';startBetTimer(table);}
   broadcastTable(table);broadcastTableList();
 }
@@ -1168,9 +1216,16 @@ io.on('connection',socket=>{
   socket.emit('table_list',getTableList());
   socket.on('auth',({token}={})=>{const u=verifyToken(token);if(u)socketToUser.set(socket.id,u);});
   socket.on('get_tables',()=>socket.emit('table_list',getTableList()));
-  socket.on('create_table',(payload={})=>{
+  socket.on('create_table',async(payload={})=>{
     const {name,token,isPrivate}=payload||{};
     const u=verifyToken(token); if(!u)return socket.emit('error_msg','Not authenticated');
+    try {
+      const [rows]=await db.execute('SELECT is_banned,token_version,self_excluded_until FROM users WHERE id=?',[u.id]);
+      if(!rows.length || !sessionMatches(rows[0],u))
+        return socket.emit('error_msg','Session expired or account unavailable');
+      if(rows[0].self_excluded_until && new Date(rows[0].self_excluded_until).getTime()>Date.now())
+        return socket.emit('error_msg','Self-exclusion is active');
+    } catch {return socket.emit('error_msg','Unable to validate session');}
     if(socketToTable.has(socket.id))return socket.emit('error_msg','Already at a table');
     if(tables.size>=100)return socket.emit('error_msg','Too many tables. Try again later.');
     if(Array.from(tables.values()).some(t=>t.ownerId===u.id && !t.seats.some(Boolean)))
@@ -1209,10 +1264,59 @@ io.on('connection',socket=>{
   socket.on('mp_hit',()=>{ const tableId=socketToTable.get(socket.id); if(!tableId) return; const table=tables.get(tableId); if(!table||table.phase!=='playing') return; const si=table.seats.findIndex(s=>s?.socketId===socket.id); if(si!==table.currentSeat) return; const seat=table.seats[si]; const hand=seat.hands[seat.activeHand]; hand.cards.push(drawCard(table.shoe)); const total=handTotal(hand.cards); broadcastTable(table); if(total>=21){hand.done=true;if(seat.activeHand+1<seat.hands.length){seat.activeHand++;}else{seat.done=true;clearTimers(table);nextPlayerTurn(table,si+1);}} });
   socket.on('mp_stand',()=>{ const tableId=socketToTable.get(socket.id); if(!tableId) return; const table=tables.get(tableId); if(!table||table.phase!=='playing') return; const si=table.seats.findIndex(s=>s?.socketId===socket.id); if(si!==table.currentSeat) return; const seat=table.seats[si]; seat.hands[seat.activeHand].done=true; clearTimers(table); if(seat.activeHand+1<seat.hands.length){seat.activeHand++;nextPlayerTurn(table,si);}else{seat.done=true;nextPlayerTurn(table,si+1);} });
   socket.on('mp_double',()=>{ const tableId=socketToTable.get(socket.id); if(!tableId) return; const table=tables.get(tableId); if(!table||table.phase!=='playing') return; const si=table.seats.findIndex(s=>s?.socketId===socket.id); if(si!==table.currentSeat) return; const seat=table.seats[si]; if(seat.balance<seat.bet) return socket.emit('error_msg','Insufficient balance'); const hand=seat.hands[seat.activeHand]; if(hand.cards.length!==2) return; seat.balance-=hand.bet; hand.bet*=2; hand.doubled=true; hand.cards.push(drawCard(table.shoe)); hand.done=true; seat.done=true; broadcastTable(table); clearTimers(table); nextPlayerTurn(table,si+1); });
-  socket.on('send_chat',(payload={})=>{const message=payload?.message; const tableId=socketToTable.get(socket.id); if(!tableId) return; const table=tables.get(tableId); if(!table||typeof message!=='string'||!message.trim()) return; const u=socketToUser.get(socket.id); const msg={username:u?.username||'Guest',message:message.trim().slice(0,120),time:Date.now()}; table.chat.push(msg); io.to(tableId).emit('new_chat',msg); });
+  socket.on('send_chat',(payload={})=>{
+    const message=payload?.message,tableId=socketToTable.get(socket.id);
+    if(!tableId || typeof message!=='string' || !message.trim())return;
+    const table=tables.get(tableId);
+    if(!table)return;
+    const now=Date.now();
+    const times=(socket.data.chatTimes||[]).filter(t=>now-t<5000);
+    if(times.length>=5)return socket.emit('error_msg','Please slow down your messages');
+    times.push(now);socket.data.chatTimes=times;
+    const u=socketToUser.get(socket.id);
+    const msg={username:u?.username||'Guest',message:message.trim().slice(0,120),time:now};
+    table.chat.push(msg);
+    if(table.chat.length>50)table.chat.shift();
+    io.to(tableId).emit('new_chat',msg);
+  });
   socket.on('leave_table',()=>leaveTable(socket));
-  socket.on('disconnect',()=>leaveTable(socket));
-  function leaveTable(socket){ const tableId=socketToTable.get(socket.id); if(!tableId) return; const table=tables.get(tableId); if(table){const si=table.seats.findIndex(s=>s?.socketId===socket.id); if(si!==-1){const name=table.seats[si].displayName||table.seats[si].username; table.seats[si]=null; io.to(tableId).emit('game_message',{text:`${name} left`,type:'leave'}); if(!table.seats.some(Boolean)){clearTimers(table);tables.delete(tableId);}else{broadcastTable(table);}}} socket.leave(tableId); socketToTable.delete(socket.id); socketToUser.delete(socket.id); broadcastTableList(); }
+  socket.on('disconnect',()=>leaveTable(socket,true));
+  function leaveTable(socket,disconnected=false){
+    const tableId=socketToTable.get(socket.id);
+    if(!tableId){socketToUser.delete(socket.id);return;}
+    const table=tables.get(tableId);
+    if(table){
+      const si=table.seats.findIndex(seat=>seat?.socketId===socket.id);
+      if(si!==-1){
+        const seat=table.seats[si];
+        const name=seat.displayName||seat.username;
+        if(disconnected){
+          seat.socketId=null;
+          io.to(tableId).emit('game_message',{text:`${name} disconnected — reserving seat for 30s`,type:'info'});
+          seat.reconnectTimer=setTimeout(()=>{
+            if(tables.get(tableId)!==table || table.seats[si]!==seat || seat.socketId)return;
+            table.seats[si]=null;
+            io.to(tableId).emit('game_message',{text:`${name} left after disconnect`,type:'leave'});
+            if(!table.seats.some(Boolean)){clearTimers(table);tables.delete(tableId);}
+            else broadcastTable(table);
+            broadcastTableList();
+          },30000);
+          seat.reconnectTimer.unref?.();
+          broadcastTable(table);
+        } else {
+          if(seat.reconnectTimer)clearTimeout(seat.reconnectTimer);
+          table.seats[si]=null;
+          io.to(tableId).emit('game_message',{text:`${name} left`,type:'leave'});
+          if(!table.seats.some(Boolean)){clearTimers(table);tables.delete(tableId);}
+          else broadcastTable(table);
+        }
+      }
+    }
+    socket.leave(tableId);
+    socketToTable.delete(socket.id);
+    socketToUser.delete(socket.id);
+    broadcastTableList();
+  }
 });
 
 // ── TOURNAMENT SYSTEM ─────────────────────────────────

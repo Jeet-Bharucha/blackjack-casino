@@ -436,3 +436,29 @@ body.luxury-front{background:#090b12;color:#f6efe2}
   .luxury-solo .info-item{min-width:100px}
   .luxury-solo .info-value{font-size:18px}
 }
+
+/* Missions are visible between sessions without hiding any betting controls. */
+.luxury-solo .table-caption .mission-badge{
+  cursor:pointer;font-family:'Cinzel',Georgia,serif;font-size:10px;line-height:1.4;
+  box-shadow:0 2px 12px rgba(0,0,0,.28);transition:background .15s;
+  min-height:32px;
+}
+.luxury-solo .table-caption .mission-badge:hover{background:#443825;color:#fff3bf}
+.luxury-solo .table-caption .mission-badge.has-rewards{
+  border-color:#80b98a;background:#1d3529;color:#ddf8dd;
+}
+.luxury-multi .mp-seat.seat-offline{
+  border:1px dashed rgba(235,192,119,.55);opacity:.75;
+}
+@media(max-width:500px){
+  .luxury-solo .table-caption .mission-badge{width:100%;order:5;font-size:9px}
+}
+
+.luxury-front .btn-cta-ghost{
+  cursor:pointer;font-family:'Cinzel',Georgia,serif;font-size:clamp(10px,1.3vw,13px);
+}
+.luxury-front .public-game-disclaimer{
+  margin:18px auto 0;max-width:680px;font:13px/1.6 Georgia,serif;
+  color:#d6cab8;letter-spacing:.3px;
+}
+.luxury-front :where(a,button):focus-visible{outline:3px solid #ffe9ae;outline-offset:4px}

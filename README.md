@@ -216,6 +216,15 @@ The old `stripe_purchases` database table, if present in an older deployment, is
 - See **[LAUNCH_CHECKLIST.md](LAUNCH_CHECKLIST.md)** before promoting the website. Automated tests and the Vercel deployment check **do not replace real-device browser QA**.
 - The site remains free-play; launch and ad eligibility depend on platform policies, age restrictions and jurisdiction-specific review. Old credentials in Git history must be revoked separately.
 
+## Release Phase 1–4: reliability, security, retention and promotion
+
+- **Reliability:** reconnect a dropped practice-table seat for up to 30 seconds, preserve the same in-memory practice chips/cards, and show meaningful reconnecting states. Practice-table state cannot survive a Render process restart; production-grade persistence is a separate future architectural project.
+- **Security:** shared REST/WebSocket origin list, protected backend static files, no-store authenticated API responses, stricter auth input checks, session enforcement of self-exclusion and rate-limited practice chat. Weekly bonuses now use atomic conditional credits.
+- **Retention:** a daily mission claim-progress badge on the Blackjack table uses the existing, **server-verified** challenges. No backend odds or reward amounts changed.
+- **Public growth:** optional share-with-friends buttons on the public homepages, and clearly visible 21+ entertainment-only/free-play messaging. Native share/clipboard is user-initiated; no tracking scripts.
+- **Monetization:** see **[MONETIZATION_READINESS.md](MONETIZATION_READINESS.md)**. No ads, in-game sales, sponsor contracts or domain purchases were activated.
+- **Checks:** see **[LAUNCH_CHECKLIST.md](LAUNCH_CHECKLIST.md)** and `backend/tests/reliability-phases.test.js`. Automated tests do not replace manual mobile QA or testing with two actual players.
+
 ## License
 
 This project is for educational and portfolio purposes only. Not intended for real gambling.
