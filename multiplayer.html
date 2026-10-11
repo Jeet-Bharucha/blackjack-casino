@@ -475,9 +475,11 @@ function renderTable(state) {
       dScore.classList.add('mp-total-deal');
       dScore.style.setProperty('--total-enter-delay',
         (delayFor(participants.length, 0) + 320) + 'ms');
-    } else {
+    } else if (!hasHole) {
       dScore.classList.remove('mp-total-deal');
     }
+  } else {
+    dScore.classList.remove('mp-total-deal');
   }
 
   // A stable element per seat is essential for natural dealing animations.
