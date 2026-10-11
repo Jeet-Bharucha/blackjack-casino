@@ -51,7 +51,11 @@
   // Server returns the whole dealt hand at once, but the player should see
   // cards leave the shoe ONE AT A TIME, like the original animated table.
   // This is presentation only: cards and payouts still come from the backend.
-  const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
+  const pause = ms => {
+    const reduced=document.body.classList.contains('reduce-motion') ||
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    return new Promise(resolve => setTimeout(resolve, reduced ? 20 : ms));
+  };
 
   function renderDealer(st) {
     const el=document.getElementById('dealerHand');
