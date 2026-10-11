@@ -107,10 +107,61 @@ test('live state reconciliation preserves card elements across socket updates', 
 test('all five seats render independently without erasing the row on each update', () => {
   assert.match(html,/state\.seats\.forEach\(\(seat, i\) =>/);
   assert.match(html,/row\.querySelector\('\[data-seat="/);
-  assert.match(html,/syncMiniCards\(cardsEl, cards, !firstPaint\)/);
-  assert.match(html,/syncMiniCards\(dHand, state\.dealerCards, !firstPaint\)/);
+  assert.match(html,/syncMiniCards\(cardsEl, cards, !firstPaint,/);
+  assert.match(html,/syncMiniCards\(dHand, state\.dealerCards, !firstPaint,/);
   const render=html.slice(html.indexOf('function renderTable(state)'),html.indexOf('function phaseLabel(phase)'));
   assert.doesNotMatch(render,/row\.innerHTML\s*=\s*['"]{2}/);
   assert.doesNotMatch(render,/dHand\.innerHTML\s*=\s*['"]{2}/);
   assert.match(html,/seat\.connected === false/);
+});
+
+test('initial deal is serial, not two cards appearing together', () => {
+  const code=html.slice(html.indexOf('function dealRevealDelay('),
+    html.indexOf('function paintMiniCard('));
+  const context={};
+  vm.createContext(context);
+  vm.runInContext(code,context,{timeout:1000});
+  const delay=context.dealRevealDelay;
+  assert.equal(delay(0,0,2),0);      // Player one: first card.
+  assert.equal(delay(1,0,2),330);    // Player two: first card.
+  assert.equal(delay(2,0,2),660);    // Dealer: face-up card.
+  assert.equal(delay(0,1,2),990);    // Player one: second card.
+  assert.equal(delay(1,1,2),1320);   // Player two: second card.
+  assert.equal(delay(2,1,2),1650);   // Dealer: face-down card.
+  const gaps=[0,1,2,3,4,5].map(n=>delay(n%3,Math.floor(n/3),2));
+  assert.deepEqual(gaps,[0,330,660,990,1320,1650]);
+  assert.match(html,/const isInitialDeal = !firstPaint/);
+  assert.match(html,/syncMiniCards\(cardsEl, cards, !firstPaint,/);
+  assert.match(html,/initialDealDelay\s*\?\s*initialDealDelay\(index\) : 0/);
+  assert.match(styles,/animation:royalCardDeal 295ms/);
+  assert.match(styles,/animation-delay:var\(--card-enter-delay,0ms\)/);
+});
+
+test('accurate visible card totals support Ace, bust, naturals and future split hands', () => {
+  const code=html.slice(html.indexOf('function dealRevealDelay('),
+    html.indexOf('function paintMiniCard('))+'\n'+
+    html.slice(html.indexOf('function handTotal(cards) {'),
+      html.indexOf('// ── BETTING'));
+  const context={};
+  vm.createContext(context);
+  vm.runInContext(code,context,{timeout:1000});
+  const total=context.handTotal, label=context.formatSeatTotals;
+  assert.equal(total([{rank:'A',suit:'♠'},{rank:'9',suit:'♥'}]),20);
+  assert.equal(total([{rank:'A',suit:'♠'},{rank:'9',suit:'♥'},{rank:'8',suit:'♣'}]),18);
+  assert.equal(total([{rank:'K',suit:'♣'},{rank:'Q',suit:'♠'},{rank:'4',suit:'♦'}]),24);
+  const hand=cards=>[{cards}];
+  assert.equal(label(hand([{rank:'A',suit:'♠'},{rank:'K',suit:'♥'}])),'Blackjack · 21');
+  assert.equal(label(hand([{rank:'A',suit:'♠'},{rank:'9',suit:'♥'}])),'Total 20');
+  assert.equal(label(hand([{rank:'A',suit:'♠'},{rank:'9',suit:'♥'},{rank:'8',suit:'♣'}])),'Total 18');
+  assert.equal(label(hand([{rank:'10',suit:'♣'},{rank:'Q',suit:'♠'},{rank:'4',suit:'♦'}])),'Bust · 24');
+  assert.equal(label([]),'');
+  assert.equal(label([{cards:[{rank:'10',suit:'♣'}]},
+    {cards:[{rank:'A',suit:'♥'},{rank:'8',suit:'♣'}]}]),
+    'Hand 1: 10 · Hand 2: 19');
+  assert.match(html,/className = 'seat-total'/);
+  assert.match(html,/i === mySeatIndex\) total\.setAttribute\('aria-live','polite'\)/);
+  assert.match(html,/dScore\.textContent = 'Dealer ' \+ handTotal\(visible\)/);
+  assert.match(html,/hasHole \? ' \+ \?' : ''/);
+  assert.match(styles,/\.luxury-multi \.mp-seat\.my-seat \.seat-total/);
+  assert.match(styles,/\.luxury-multi \.seat-total\.mp-total-deal/);
 });
