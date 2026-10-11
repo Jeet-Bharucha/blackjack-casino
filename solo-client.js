@@ -30,7 +30,7 @@
     } catch(error){
       showToast(error.message);
       try{await restore();}catch{}
-    } finally{clearTimeout(waitNotice);setBusy(false);refreshControls();}
+    } finally{setBusy(false);clearTimeout(waitNotice);refreshControls();}
   }
   function refreshControls() {
     if(pending)return;
