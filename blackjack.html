@@ -482,7 +482,7 @@ function applyCosmetics() {
 
 function applyTheme(theme) {
   const themes = {
-    default:    { bg: '#0a3d1a', felt: 'radial-gradient(ellipse 90% 80% at 50% 55%,#1a5c2a 0%,#0f3d1a 50%,#0a2e13 100%)' },
+    default:    { bg: '#080910', felt: 'radial-gradient(ellipse 85% 85% at 50% 46%,#203a37 0%,#151e20 54%,#090d13 100%)' },
     vegas_night:{ bg: '#1a0533', felt: 'radial-gradient(ellipse 90% 80% at 50% 55%,#2d0a55 0%,#1a0533 50%,#0d0022 100%)' },
     neon_city:  { bg: '#001a33', felt: 'radial-gradient(ellipse 90% 80% at 50% 55%,#003355 0%,#001a33 50%,#00111f 100%)' },
     egypt:      { bg: '#2d1a00', felt: 'radial-gradient(ellipse 90% 80% at 50% 55%,#5c3300 0%,#3d2200 50%,#1a0e00 100%)' },
@@ -622,7 +622,7 @@ function speak(text) {
   if (!voiceEnabled || localStorage.getItem('bj_mute')==='1') return;
   synth.cancel();
   const u = new SpeechSynthesisUtterance(text);
-  u.rate = 0.85; u.pitch = 0.75; u.volume = 0.9;
+  u.rate = 0.85; u.pitch = 0.75; u.volume = Math.min(0.9,Number(localStorage.getItem('bj_volume') ?? '0.55'));
   synth.speak(u);
 }
 
@@ -814,8 +814,23 @@ function buildCardEl(card,faceDown=false){
   const back=document.createElement('div'); back.className='card-back'; back.innerHTML='<div class="card-back-border"></div>';
   inner.appendChild(front);inner.appendChild(back);w.appendChild(inner); return w;
 }
-function flipCard(w){ return new Promise(r=>{ playTone('flip'); w.querySelector('.card-inner').classList.remove('flipped'); w.dataset.faceDown='0'; setTimeout(r,460); }); }
-function addCardToEl(el,card,faceDown=false,delay=0){ return new Promise(r=>{ setTimeout(()=>{ playTone('deal'); const c=buildCardEl(card,faceDown); el.appendChild(c); setTimeout(()=>{c.classList.remove('dealing');r(c);},400); },delay); }); }
+function flipCard(w){ return new Promise(r=>{
+  playTone('flip');
+  w.querySelector('.card-inner').classList.remove('flipped');
+  w.dataset.faceDown='0';
+  const reduced=document.body.classList.contains('reduce-motion') || window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  setTimeout(r,reduced?35:460);
+}); }
+function addCardToEl(el,card,faceDown=false,delay=0){ return new Promise(r=>{
+  setTimeout(()=>{
+    playTone('deal');
+    const c=buildCardEl(card,faceDown);
+    el.appendChild(c);
+    const reduced=document.body.classList.contains('reduce-motion') || window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const duration=reduced?40:equippedCosmetics.card_anim==='slow_reveal'?610:400;
+    setTimeout(()=>{c.classList.remove('dealing');r(c);},duration);
+  },delay);
+}); }
 
 function updateHandEl(handEl,cards,hideSecond=false){
   const scoreEl=handEl.querySelector('.score-badge');
