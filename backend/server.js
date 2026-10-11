@@ -1164,8 +1164,13 @@ async function joinSocketTable(socket,tableId,token,inviteCode){
   if(socketToTable.has(socket.id))return socket.emit('error_msg','Already at a table');
   const table=tables.get(tableId); if(!table)return socket.emit('error_msg','Table not found');
   if(table.isPrivate && inviteCode!==table.inviteCode)return socket.emit('error_msg','Invite code required');
-  const freeSeat=table.seats.findIndex(s=>s===null);if(freeSeat===-1)return socket.emit('error_msg','Table is full');
-  if(table.seats.some(s=>s&&s.userId===u.id))return socket.emit('error_msg','Already seated at this table');
+  // A connection drop keeps a practice-table seat reserved briefly, allowing
+  // the same verified user to resume their exact in-memory cards and chips.
+  const returning=table.seats.findIndex(seat=>seat?.userId===u.id&&!seat.socketId);
+  const freeSeat=returning!==-1?returning:table.seats.findIndex(seat=>seat===null);
+  if(freeSeat===-1)return socket.emit('error_msg','Table is full');
+  if(returning===-1 && table.seats.some(seat=>seat&&seat.userId===u.id))
+    return socket.emit('error_msg','Already seated at this table');
   let name=u.username,avatar=null;
   try{
     const [rows]=await db.execute('SELECT username,display_name,avatar,is_banned,token_version,self_excluded_until FROM users WHERE id=?',[u.id]);
@@ -1175,13 +1180,20 @@ async function joinSocketTable(socket,tableId,token,inviteCode){
     name=rows[0].display_name||u.username;
     avatar=rows[0].avatar;
   }catch(e){return socket.emit('error_msg','Unable to load account');}
-  table.seats[freeSeat]={socketId:socket.id,userId:u.id,username:u.username,displayName:name,avatar,
-    vipTier:'Bronze',balance:1000,bet:0,hasBet:false,ready:false,hands:[],activeHand:0,done:false};
+  if(returning!==-1){
+    const seat=table.seats[returning];
+    if(seat.reconnectTimer){clearTimeout(seat.reconnectTimer);seat.reconnectTimer=null;}
+    seat.socketId=socket.id;
+    seat.displayName=name; seat.avatar=avatar;
+  } else {
+    table.seats[freeSeat]={socketId:socket.id,userId:u.id,username:u.username,displayName:name,avatar,
+      vipTier:'Bronze',balance:1000,bet:0,hasBet:false,ready:false,hands:[],activeHand:0,done:false};
+  }
   socketToTable.set(socket.id,table.id);socketToUser.set(socket.id,u);
   socket.join(table.id);
-  socket.emit('joined_table',{tableId:table.id,seatIndex:freeSeat,balance:1000,
+  socket.emit('joined_table',{tableId:table.id,seatIndex:freeSeat,balance:table.seats[freeSeat].balance,
     isPrivate:table.isPrivate,inviteCode:table.isPrivate?table.inviteCode:null});
-  io.to(table.id).emit('game_message',{text:name+' joined',type:'join'});
+  io.to(table.id).emit('game_message',{text:name+(returning!==-1?' reconnected':' joined'),type:'join'});
   if(!table.isPrivate && table.phase==='waiting'){table.phase='betting';startBetTimer(table);}
   broadcastTable(table);broadcastTableList();
 }
@@ -1232,8 +1244,43 @@ io.on('connection',socket=>{
   socket.on('mp_double',()=>{ const tableId=socketToTable.get(socket.id); if(!tableId) return; const table=tables.get(tableId); if(!table||table.phase!=='playing') return; const si=table.seats.findIndex(s=>s?.socketId===socket.id); if(si!==table.currentSeat) return; const seat=table.seats[si]; if(seat.balance<seat.bet) return socket.emit('error_msg','Insufficient balance'); const hand=seat.hands[seat.activeHand]; if(hand.cards.length!==2) return; seat.balance-=hand.bet; hand.bet*=2; hand.doubled=true; hand.cards.push(drawCard(table.shoe)); hand.done=true; seat.done=true; broadcastTable(table); clearTimers(table); nextPlayerTurn(table,si+1); });
   socket.on('send_chat',(payload={})=>{const message=payload?.message; const tableId=socketToTable.get(socket.id); if(!tableId) return; const table=tables.get(tableId); if(!table||typeof message!=='string'||!message.trim()) return; const u=socketToUser.get(socket.id); const msg={username:u?.username||'Guest',message:message.trim().slice(0,120),time:Date.now()}; table.chat.push(msg); if(table.chat.length>50)table.chat.shift(); io.to(tableId).emit('new_chat',msg); });
   socket.on('leave_table',()=>leaveTable(socket));
-  socket.on('disconnect',()=>leaveTable(socket));
-  function leaveTable(socket){ const tableId=socketToTable.get(socket.id); if(!tableId) return; const table=tables.get(tableId); if(table){const si=table.seats.findIndex(s=>s?.socketId===socket.id); if(si!==-1){const name=table.seats[si].displayName||table.seats[si].username; table.seats[si]=null; io.to(tableId).emit('game_message',{text:`${name} left`,type:'leave'}); if(!table.seats.some(Boolean)){clearTimers(table);tables.delete(tableId);}else{broadcastTable(table);}}} socket.leave(tableId); socketToTable.delete(socket.id); socketToUser.delete(socket.id); broadcastTableList(); }
+  socket.on('disconnect',()=>leaveTable(socket,true));
+  function leaveTable(socket,disconnected=false){
+    const tableId=socketToTable.get(socket.id);
+    if(!tableId){socketToUser.delete(socket.id);return;}
+    const table=tables.get(tableId);
+    if(table){
+      const si=table.seats.findIndex(seat=>seat?.socketId===socket.id);
+      if(si!==-1){
+        const seat=table.seats[si];
+        const name=seat.displayName||seat.username;
+        if(disconnected){
+          seat.socketId=null;
+          io.to(tableId).emit('game_message',{text:`${name} disconnected — reserving seat for 30s`,type:'info'});
+          seat.reconnectTimer=setTimeout(()=>{
+            if(tables.get(tableId)!==table || table.seats[si]!==seat || seat.socketId)return;
+            table.seats[si]=null;
+            io.to(tableId).emit('game_message',{text:`${name} left after disconnect`,type:'leave'});
+            if(!table.seats.some(Boolean)){clearTimers(table);tables.delete(tableId);}
+            else broadcastTable(table);
+            broadcastTableList();
+          },30000);
+          seat.reconnectTimer.unref?.();
+          broadcastTable(table);
+        } else {
+          if(seat.reconnectTimer)clearTimeout(seat.reconnectTimer);
+          table.seats[si]=null;
+          io.to(tableId).emit('game_message',{text:`${name} left`,type:'leave'});
+          if(!table.seats.some(Boolean)){clearTimers(table);tables.delete(tableId);}
+          else broadcastTable(table);
+        }
+      }
+    }
+    socket.leave(tableId);
+    socketToTable.delete(socket.id);
+    socketToUser.delete(socket.id);
+    broadcastTableList();
+  }
 });
 
 // ── TOURNAMENT SYSTEM ─────────────────────────────────
