@@ -184,3 +184,48 @@
   .luxury-multi .mini-card.mp-card-deal,
   .luxury-multi .mini-card.mp-card-flip{animation:none}
 }
+
+
+/* Stop the betting/coin controls from overlapping or covering phone cards.
+   All sections participate in normal document flow with intrinsic height. */
+@media(max-width:700px){
+  body.luxury-multi{height:auto;min-height:100svh;overflow-y:auto}
+  .luxury-multi .layout{
+    display:block;height:auto!important;min-height:calc(100svh - 62px);
+    overflow:visible;
+  }
+  .luxury-multi #gameView{
+    flex:0 0 auto;min-height:0;height:auto!important;overflow:visible;
+  }
+  .luxury-multi .game-layout{
+    display:block;flex:none;width:100%;min-height:0;height:auto!important;
+    overflow:visible;
+  }
+  .luxury-multi .table-area{
+    display:grid;grid-template-columns:minmax(0,1fr);
+    grid-template-rows:max-content max-content;
+    align-content:start;justify-content:stretch;justify-items:center;
+    align-items:start;gap:20px;
+    min-height:0;height:auto!important;overflow:visible;
+  }
+  .luxury-multi .mp-table{
+    position:relative;grid-row:1;
+    align-self:start;min-height:max-content;height:auto!important;
+    margin:0;overflow:visible;
+  }
+  .luxury-multi .mp-players-row{
+    min-height:max-content;height:auto;
+    align-items:stretch;overflow:visible;
+  }
+  .luxury-multi .mp-controls{
+    position:relative;grid-row:2;align-self:start;
+    height:auto!important;max-height:none;
+    margin:0;z-index:1;
+  }
+  .luxury-multi .mp-bet-row{
+    position:relative;z-index:1;
+  }
+  .luxury-multi .chat-panel{
+    position:relative;width:calc(100% - 20px);margin:8px auto 25px;
+  }
+}
