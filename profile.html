@@ -188,7 +188,17 @@ let profileData = null;
 
 function logout(){ localStorage.removeItem('bj_token'); localStorage.removeItem('bj_user'); window.location.href='login.html'; }
 function showToast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2500); }
-function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function esc(s){
+  return String(s).replace(/[&<>"']/g,c=>({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  })[c]);
+}
+function safeAvatarSrc(value){
+  const src=String(value||'');
+  if (/^data:image\/(?:png|jpeg|webp|gif);base64,[A-Za-z0-9+/=]+$/.test(src) ||
+      /^https:\/\/[^\s<>"']+$/.test(src)) return esc(src);
+  return null;
+}
 
 const ALL_ACHIEVEMENTS = [
   { key:'first_hand',      name:'First Hand',    desc:'Play your first hand',      icon:'🃏' },
@@ -248,8 +258,9 @@ function render(data) {
   const tp = getTierProgress(totalWon);
   const displayName = data.displayName || data.username;
 
-  const avatarHTML = data.avatar
-    ? `<img src="${data.avatar}" alt="avatar"/>`
+  const safeAvatar = safeAvatarSrc(data.avatar);
+  const avatarHTML = safeAvatar
+    ? `<img src="${safeAvatar}" alt="avatar"/>`
     : esc(displayName[0].toUpperCase());
 
   const editSection = isOwnProfile ? `
