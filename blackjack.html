@@ -566,7 +566,7 @@ function playChipSound() {
     const sound = equippedCosmetics.chip_sound || 'classic';
     const osc = audioCtx.createOscillator();
     const gain = audioCtx.createGain();
-    osc.connect(gain); gain.connect(audioCtx.destination);
+    osc.connect(gain); gain.connect(masterGain);
     if (sound === 'classic') {
       osc.frequency.setValueAtTime(800, audioCtx.currentTime);
       osc.frequency.exponentialRampToValueAtTime(400, audioCtx.currentTime + 0.1);
@@ -605,6 +605,16 @@ function getCardAnimStyle() {
 
 // ── AUDIO ──────────────────────────────────────────
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+const masterGain = audioCtx.createGain();
+const savedVolume = Number(localStorage.getItem('bj_volume'));
+const casinoVolume = Number.isFinite(savedVolume) && localStorage.getItem('bj_volume') !== null ? Math.max(0,Math.min(1,savedVolume)) : 0.55;
+masterGain.gain.value = localStorage.getItem('bj_mute')==='1' ? 0 : casinoVolume;
+masterGain.connect(audioCtx.destination);
+function setCasinoVolume(value) {
+  const safe = Math.max(0,Math.min(1,Number(value)||0));
+  localStorage.setItem('bj_volume',String(safe));
+  masterGain.gain.value = localStorage.getItem('bj_mute')==='1' ? 0 : safe;
+}
 let voiceEnabled = false, ambienceEnabled = false, ambienceNode = null;
 const synth = window.speechSynthesis;
 
@@ -620,6 +630,7 @@ function toggleMute(){
   const muted=localStorage.getItem('bj_mute')!=='1';
   localStorage.setItem('bj_mute',muted?'1':'0');
   const btn=document.getElementById('muteBtn');
+  masterGain.gain.value=muted?0:Number(localStorage.getItem('bj_volume') ?? '0.55');
   btn.textContent=muted?'🔇':'🔉';
   btn.setAttribute('aria-label',muted?'Unmute game audio':'Mute all game audio');
   if(muted){stopAmbience();synth.cancel();}
@@ -649,7 +660,7 @@ function startAmbience() {
   const src = audioCtx.createBufferSource(); src.buffer = buffer; src.loop = true;
   const filter = audioCtx.createBiquadFilter(); filter.type = 'bandpass'; filter.frequency.value = 600; filter.Q.value = 0.3;
   const gain = audioCtx.createGain(); gain.gain.value = 0.25;
-  src.connect(filter); filter.connect(gain); gain.connect(audioCtx.destination);
+  src.connect(filter); filter.connect(gain); gain.connect(masterGain);
   src.start(); ambienceNode = { src, gain };
 }
 
@@ -664,11 +675,11 @@ function playTone(type) {
   try {
     if (audioCtx.state === 'suspended') audioCtx.resume();
     const osc = audioCtx.createOscillator(), g = audioCtx.createGain();
-    osc.connect(g); g.connect(audioCtx.destination);
+    osc.connect(g); g.connect(masterGain);
     if (type==='deal') { osc.frequency.setValueAtTime(800,audioCtx.currentTime); osc.frequency.exponentialRampToValueAtTime(400,audioCtx.currentTime+.06); g.gain.setValueAtTime(.08,audioCtx.currentTime); g.gain.exponentialRampToValueAtTime(.001,audioCtx.currentTime+.08); osc.start(); osc.stop(audioCtx.currentTime+.08); }
     else if (type==='chip') { osc.type='triangle'; osc.frequency.setValueAtTime(1200,audioCtx.currentTime); osc.frequency.exponentialRampToValueAtTime(600,audioCtx.currentTime+.05); g.gain.setValueAtTime(.05,audioCtx.currentTime); g.gain.exponentialRampToValueAtTime(.001,audioCtx.currentTime+.07); osc.start(); osc.stop(audioCtx.currentTime+.07); }
     else if (type==='flip') { osc.type='sine'; osc.frequency.setValueAtTime(500,audioCtx.currentTime); osc.frequency.linearRampToValueAtTime(1000,audioCtx.currentTime+.1); g.gain.setValueAtTime(.04,audioCtx.currentTime); g.gain.exponentialRampToValueAtTime(.001,audioCtx.currentTime+.12); osc.start(); osc.stop(audioCtx.currentTime+.12); }
-    else if (type==='win') { [523,659,784].forEach((f,i)=>{ const o=audioCtx.createOscillator(),gg=audioCtx.createGain(); o.connect(gg);gg.connect(audioCtx.destination); o.frequency.value=f; gg.gain.setValueAtTime(0,audioCtx.currentTime+i*.1); gg.gain.linearRampToValueAtTime(.1,audioCtx.currentTime+i*.1+.02); gg.gain.exponentialRampToValueAtTime(.001,audioCtx.currentTime+i*.1+.3); o.start(audioCtx.currentTime+i*.1); o.stop(audioCtx.currentTime+i*.1+.3); }); }
+    else if (type==='win') { [523,659,784].forEach((f,i)=>{ const o=audioCtx.createOscillator(),gg=audioCtx.createGain(); o.connect(gg);gg.connect(masterGain); o.frequency.value=f; gg.gain.setValueAtTime(0,audioCtx.currentTime+i*.1); gg.gain.linearRampToValueAtTime(.1,audioCtx.currentTime+i*.1+.02); gg.gain.exponentialRampToValueAtTime(.001,audioCtx.currentTime+i*.1+.3); o.start(audioCtx.currentTime+i*.1); o.stop(audioCtx.currentTime+i*.1+.3); }); }
     else if (type==='lose') { osc.frequency.setValueAtTime(300,audioCtx.currentTime); osc.frequency.exponentialRampToValueAtTime(150,audioCtx.currentTime+.3); g.gain.setValueAtTime(.08,audioCtx.currentTime); g.gain.exponentialRampToValueAtTime(.001,audioCtx.currentTime+.35); osc.start(); osc.stop(audioCtx.currentTime+.35); }
   } catch {}
 }
