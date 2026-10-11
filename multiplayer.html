@@ -245,11 +245,11 @@
             <div class="mp-info"><span class="mp-info-label">My Bet</span><span class="mp-info-val" id="mpBetDisplay">0 chips</span></div>
           </div>
           <div class="mp-bet-row" id="mpChips">
-            <button type="button" class="mp-chip chip-1 disabled" aria-label="Add 1 virtual chips to bet" onclick="mpBet(1)">1</button>
-            <button type="button" class="mp-chip chip-5 disabled" aria-label="Add 5 virtual chips to bet" onclick="mpBet(5)">5</button>
-            <button type="button" class="mp-chip chip-10 disabled" aria-label="Add 10 virtual chips to bet" onclick="mpBet(10)">10</button>
-            <button type="button" class="mp-chip chip-25 disabled" aria-label="Add 25 virtual chips to bet" onclick="mpBet(25)">25</button>
-            <button type="button" class="mp-chip chip-100 disabled" aria-label="Add 100 virtual chips to bet" onclick="mpBet(100)">100</button>
+            <button type="button" class="mp-chip chip-1 disabled" disabled aria-label="Add 1 virtual chips to bet" onclick="mpBet(1)">1</button>
+            <button type="button" class="mp-chip chip-5 disabled" disabled aria-label="Add 5 virtual chips to bet" onclick="mpBet(5)">5</button>
+            <button type="button" class="mp-chip chip-10 disabled" disabled aria-label="Add 10 virtual chips to bet" onclick="mpBet(10)">10</button>
+            <button type="button" class="mp-chip chip-25 disabled" disabled aria-label="Add 25 virtual chips to bet" onclick="mpBet(25)">25</button>
+            <button type="button" class="mp-chip chip-100 disabled" disabled aria-label="Add 100 virtual chips to bet" onclick="mpBet(100)">100</button>
           </div>
           <div class="mp-btn-row">
             <button class="mp-btn hit"    id="mpHit"    onclick="mpAction('mp_hit')"    disabled>Hit</button>
@@ -456,7 +456,7 @@ function renderTable(state) {
 
   // Chips
   const canBet = state.phase === 'betting' && mySeatIndex !== -1;
-  document.getElementById('mpChips').querySelectorAll('.mp-chip').forEach(c => c.classList.toggle('disabled', !canBet));
+  document.getElementById('mpChips').querySelectorAll('.mp-chip').forEach(c => { c.classList.toggle('disabled', !canBet); c.disabled = !canBet; });
 }
 
 function phaseLabel(phase) {
@@ -494,7 +494,7 @@ function enableActions(on) {
   document.getElementById('mpStand').disabled = !on;
   document.getElementById('mpDouble').disabled = !on;
 }
-function disableChips() { document.getElementById('mpChips').querySelectorAll('.mp-chip').forEach(c=>c.classList.add('disabled')); }
+function disableChips() { document.getElementById('mpChips').querySelectorAll('.mp-chip').forEach(c=>{ c.classList.add('disabled'); c.disabled=true; }); }
 
 // ── CHAT ───────────────────────────────────────────
 function addChat(text, type='msg') {
