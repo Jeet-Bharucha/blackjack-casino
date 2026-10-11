@@ -261,3 +261,25 @@ body.luxury-auth{padding:25px 10px}
     animation-duration:.01ms!important;transition-duration:.01ms!important;
   }
 }
+
+/* Semantic navigation actions use button elements, not click-only spans. */
+.luxury-page button.nav-action{appearance:none;background:none;border:0;padding:0;
+  cursor:pointer;font:inherit;font-size:inherit;letter-spacing:inherit;color:#d7c094}
+.luxury-page button.nav-action:hover{color:#fff4d2}
+.luxury-page button.cat-item{appearance:none;width:100%;text-align:left;
+  font-family:inherit;font-size:13px;letter-spacing:1px;cursor:pointer}
+.luxury-page button.tab{appearance:none;font-family:inherit;cursor:pointer}
+.luxury-page .page-notice{background:#203328bb;border:1px solid #567d63;
+  color:#dbefda;padding:13px 16px;border-radius:11px;line-height:1.5;
+  text-align:center;font-size:13px;margin:20px auto}
+.luxury-page .referral-code-row{flex-wrap:wrap}
+.luxury-page .referral-code-box{min-width:0;overflow-wrap:anywhere}
+@media(max-width:800px){
+  .luxury-page button.cat-item{width:auto}
+  .luxury-page button.nav-action{background:#272633;border:0;padding:7px 10px}
+}
+/* Responsive data tables must scroll, not clip user balances or rows. */
+.luxury-page .table-scroll{overflow-x:auto;max-width:100%;border-radius:14px}
+.luxury-page .table-scroll:focus-visible{outline:3px solid #fff0bb}
+.luxury-page .my-card .my-info{min-width:0}
+.luxury-page .my-name{overflow-wrap:anywhere}
