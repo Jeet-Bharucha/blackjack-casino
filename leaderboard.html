@@ -148,8 +148,9 @@ async function loadLeaderboard() {
       const isMe=p.username===userData.username;
       const wr=p.winRate, wrClass=wr>=50?'high':wr>=35?'mid':'low';
       const rankClass=p.rank<=3?`rank-${p.rank}`:'';
-      const avatarHTML=p.avatar
-        ?`<div class="player-avatar"><img src="${p.avatar}" alt=""/></div>`
+      const avatarSrc=safeAvatarSrc(p.avatar);
+      const avatarHTML=avatarSrc
+        ?`<div class="player-avatar"><img src="${avatarSrc}" alt=""/></div>`
         :`<div class="player-avatar">${esc((p.displayName||p.username)[0].toUpperCase())}</div>`;
       const displayName=p.displayName||p.username;
       const nameStyle = p.equippedNameColor && NAME_COLOR_CSS[p.equippedNameColor] ? NAME_COLOR_CSS[p.equippedNameColor] : '';
@@ -179,7 +180,17 @@ async function loadLeaderboard() {
   }
 }
 
-function esc(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function esc(s){
+  return String(s??'').replace(/[&<>"']/g,c=>({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  })[c]);
+}
+function safeAvatarSrc(value){
+  const src=String(value||'');
+  if (/^data:image\/(?:png|jpeg|webp|gif);base64,[A-Za-z0-9+/=]+$/.test(src) ||
+      /^https:\/\/[^\s<>"']+$/.test(src)) return esc(src);
+  return null;
+}
 
 document.getElementById('allTimeBtn').setAttribute('aria-pressed','true');
 document.getElementById('seasonBtn').setAttribute('aria-pressed','false');
