@@ -283,3 +283,24 @@ body.luxury-auth{padding:25px 10px}
 .luxury-page .table-scroll:focus-visible{outline:3px solid #fff0bb}
 .luxury-page .my-card .my-info{min-width:0}
 .luxury-page .my-name{overflow-wrap:anywhere}
+
+
+.luxury-auth button.tab{background:transparent;border:0;border-bottom:2px solid transparent;
+  border-radius:0;font-family:inherit;cursor:pointer}
+.luxury-auth button.tab.active{border-bottom-color:#f1d291}
+.luxury-auth button.forgot-link,.luxury-auth button.back-link{
+  display:block;width:100%;background:transparent;border:0;
+  color:#e4cfa4;text-decoration:underline;text-decoration-color:#8d7048;
+  font:inherit;font-size:13px;padding:8px 0;cursor:pointer;
+}
+.luxury-auth .pw-toggle{color:#ddc695}
+.luxury-auth .bg-card{opacity:.62}
+.luxury-gate{display:flex;align-items:center;justify-content:center}
+.luxury-gate main{
+  background:linear-gradient(145deg,#252630,#10131b);
+  border:1px solid #d2ad7199;box-shadow:0 28px 80px #0009;
+  color:#f5e8d0;border-radius:24px;
+}
+.luxury-gate h1{color:#ffdfa4}
+.luxury-gate p{color:#d9cdb6}
+.luxury-gate a{background:linear-gradient(135deg,#ba9654,#ffe6ac);color:#1d2027;border-radius:12px}
