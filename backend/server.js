@@ -17,7 +17,7 @@ if (process.env.RESEND_API_KEY) {
   resendApiKey = process.env.RESEND_API_KEY;
   console.log('✅ Email (Resend) ready');
 } else {
-  console.warn('⚠️  Email not configured — set RESEND_API_KEY in Railway Variables');
+  console.warn('⚠️  Email not configured — set RESEND_API_KEY in Render Environment');
 }
 
 async function sendEmail({ to, subject, html }) {
@@ -35,8 +35,6 @@ async function sendEmail({ to, subject, html }) {
 
 const app    = express();
 const server = http.createServer(app);
-const io     = new Server(server, { cors: { origin: '*' } });
-
 const PORT       = process.env.PORT       || 4000;
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) throw new Error('JWT_SECRET environment variable must be set');
@@ -45,6 +43,12 @@ app.set('trust proxy', 1);
 const allowedOrigins = (process.env.FRONTEND_ORIGINS ||
   'https://blackjack-casino-inky.vercel.app,https://blackjack-casino-jeet-bharucha-s-projects.vercel.app,https://blackjack-casino-git-master-jeet-bharucha-s-projects.vercel.app,https://blackjack-casino-nob6.onrender.com')
   .split(',').map(x => x.trim()).filter(Boolean);
+// Browser and socket transports use the same explicit origin allow-list.
+// Requests without an Origin (health probes, CLI clients) remain supported.
+const io = new Server(server,{
+  cors:{origin:allowedOrigins,methods:['GET','POST']},
+  allowRequest:(req, callback)=>callback(null,!req.headers.origin||allowedOrigins.includes(req.headers.origin))
+});
 app.use(cors({ origin(origin, cb) {
   return cb(null, !origin || allowedOrigins.includes(origin));
 } }));
@@ -70,7 +74,15 @@ function throttle(maxAttempts, windowMs) {
 }
 
 app.use(express.json({ limit: '5mb' })); // allow base64 avatar uploads
-app.use(express.static(path.join(__dirname, '..')));
+// Never serve backend source, logs, dependencies or security/configuration files
+// from the Render origin. Static gameplay assets at the web root remain available.
+app.use((req,res,next)=>{
+  if (/^\/(?:backend|node_modules|\.git|\.github)(?:\/|$)/i.test(req.path) ||
+      /(?:^|\/)(?:\.env(?:\..*)?|[^/]+\.(?:log|err))$/i.test(req.path))
+    return res.status(404).json({error:'Not found'});
+  next();
+});
+app.use(express.static(path.join(__dirname, '..'),{dotfiles:'ignore'}));
 
 // ── MYSQL ─────────────────────────────────────────────
 let db;
@@ -431,9 +443,11 @@ async function auth(req, res, next) {
   try { claims=jwt.verify(token, JWT_SECRET); }
   catch { return res.status(401).json({error:'Session expired. Please sign in again.'}); }
   try {
-    const [rows]=await db.execute('SELECT is_banned,token_version FROM users WHERE id=?',[claims.id]);
+    const [rows]=await db.execute('SELECT is_banned,token_version,self_excluded_until FROM users WHERE id=?',[claims.id]);
     if(!rows.length || !sessionMatches(rows[0],claims))
       return res.status(401).json({error:'Session expired. Please sign in again.'});
+    if(rows[0].self_excluded_until && new Date(rows[0].self_excluded_until).getTime()>Date.now())
+      return res.status(403).json({error:'Self-exclusion is active. You cannot play until the exclusion period ends.'});
   } catch(err) {
     console.error('Session validation database error:',err.code||err.message);
     return res.status(503).json({error:'Session validation is temporarily unavailable. Try again in a moment.'});
@@ -1149,8 +1163,10 @@ async function joinSocketTable(socket,tableId,token,inviteCode){
   if(table.seats.some(s=>s&&s.userId===u.id))return socket.emit('error_msg','Already seated at this table');
   let name=u.username,avatar=null;
   try{
-    const [rows]=await db.execute('SELECT username,display_name,avatar,is_banned,token_version FROM users WHERE id=?',[u.id]);
+    const [rows]=await db.execute('SELECT username,display_name,avatar,is_banned,token_version,self_excluded_until FROM users WHERE id=?',[u.id]);
     if(!rows.length||!sessionMatches(rows[0],u))return socket.emit('error_msg','Session expired or account unavailable');
+    if(rows[0].self_excluded_until && new Date(rows[0].self_excluded_until).getTime()>Date.now())
+      return socket.emit('error_msg','Self-exclusion is active');
     name=rows[0].display_name||u.username;
     avatar=rows[0].avatar;
   }catch(e){return socket.emit('error_msg','Unable to load account');}
@@ -1209,7 +1225,7 @@ io.on('connection',socket=>{
   socket.on('mp_hit',()=>{ const tableId=socketToTable.get(socket.id); if(!tableId) return; const table=tables.get(tableId); if(!table||table.phase!=='playing') return; const si=table.seats.findIndex(s=>s?.socketId===socket.id); if(si!==table.currentSeat) return; const seat=table.seats[si]; const hand=seat.hands[seat.activeHand]; hand.cards.push(drawCard(table.shoe)); const total=handTotal(hand.cards); broadcastTable(table); if(total>=21){hand.done=true;if(seat.activeHand+1<seat.hands.length){seat.activeHand++;}else{seat.done=true;clearTimers(table);nextPlayerTurn(table,si+1);}} });
   socket.on('mp_stand',()=>{ const tableId=socketToTable.get(socket.id); if(!tableId) return; const table=tables.get(tableId); if(!table||table.phase!=='playing') return; const si=table.seats.findIndex(s=>s?.socketId===socket.id); if(si!==table.currentSeat) return; const seat=table.seats[si]; seat.hands[seat.activeHand].done=true; clearTimers(table); if(seat.activeHand+1<seat.hands.length){seat.activeHand++;nextPlayerTurn(table,si);}else{seat.done=true;nextPlayerTurn(table,si+1);} });
   socket.on('mp_double',()=>{ const tableId=socketToTable.get(socket.id); if(!tableId) return; const table=tables.get(tableId); if(!table||table.phase!=='playing') return; const si=table.seats.findIndex(s=>s?.socketId===socket.id); if(si!==table.currentSeat) return; const seat=table.seats[si]; if(seat.balance<seat.bet) return socket.emit('error_msg','Insufficient balance'); const hand=seat.hands[seat.activeHand]; if(hand.cards.length!==2) return; seat.balance-=hand.bet; hand.bet*=2; hand.doubled=true; hand.cards.push(drawCard(table.shoe)); hand.done=true; seat.done=true; broadcastTable(table); clearTimers(table); nextPlayerTurn(table,si+1); });
-  socket.on('send_chat',(payload={})=>{const message=payload?.message; const tableId=socketToTable.get(socket.id); if(!tableId) return; const table=tables.get(tableId); if(!table||typeof message!=='string'||!message.trim()) return; const u=socketToUser.get(socket.id); const msg={username:u?.username||'Guest',message:message.trim().slice(0,120),time:Date.now()}; table.chat.push(msg); io.to(tableId).emit('new_chat',msg); });
+  socket.on('send_chat',(payload={})=>{const message=payload?.message; const tableId=socketToTable.get(socket.id); if(!tableId) return; const table=tables.get(tableId); if(!table||typeof message!=='string'||!message.trim()) return; const u=socketToUser.get(socket.id); const msg={username:u?.username||'Guest',message:message.trim().slice(0,120),time:Date.now()}; table.chat.push(msg); if(table.chat.length>50)table.chat.shift(); io.to(tableId).emit('new_chat',msg); });
   socket.on('leave_table',()=>leaveTable(socket));
   socket.on('disconnect',()=>leaveTable(socket));
   function leaveTable(socket){ const tableId=socketToTable.get(socket.id); if(!tableId) return; const table=tables.get(tableId); if(table){const si=table.seats.findIndex(s=>s?.socketId===socket.id); if(si!==-1){const name=table.seats[si].displayName||table.seats[si].username; table.seats[si]=null; io.to(tableId).emit('game_message',{text:`${name} left`,type:'leave'}); if(!table.seats.some(Boolean)){clearTimers(table);tables.delete(tableId);}else{broadcastTable(table);}}} socket.leave(tableId); socketToTable.delete(socket.id); socketToUser.delete(socket.id); broadcastTableList(); }
