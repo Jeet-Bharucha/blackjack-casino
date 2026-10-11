@@ -328,22 +328,43 @@ function filterCat(cat) {
   renderItems(filtered);
 }
 
+async function requestShop(path, options = {}) {
+  const response = await fetch(API + path, {
+    ...options, headers:{Authorization:`Bearer ${token}`, ...(options.headers || {})}
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data.error) throw Error(data.error || 'Unable to reach the shop. Please try again.');
+  return data;
+}
+
 async function loadShop() {
-  const data = await fetch(`${API}/cosmetics/shop`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json());
-  if (data.error) { console.warn(data.error); return; }
-  allItems = data;
-  filterCat(currentCat);
+  try {
+    const data = await requestShop('/cosmetics/shop');
+    if (!Array.isArray(data)) throw Error('Unexpected shop response');
+    allItems = data;
+    filterCat(currentCat);
+  } catch(error) {
+    showToast('Shop temporarily unavailable. Try refreshing the page.',false);
+    const grid=document.getElementById('itemsGrid');
+    if (!allItems.length) grid.innerHTML = '<p class="page-notice" role="status">Cannot load items right now. Check your connection and refresh.</p>';
+  }
 }
 
 async function buyItem(id) {
   const btn = document.querySelector(`#card-${id} .btn`);
   if (btn) { btn.disabled = true; btn.textContent = 'Buying…'; }
 
-  const data = await fetch(`${API}/cosmetics/buy`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ cosmeticId: id }),
-  }).then(r => r.json());
+  let data;
+  try {
+    data = await requestShop('/cosmetics/buy', {
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({cosmeticId:id})
+    });
+  } catch(error) {
+    showToast('❌ '+error.message,false);
+    if(btn){btn.disabled=false;btn.textContent='Try Again';}
+    return;
+  }
 
   if (data.error) {
     showToast('❌ ' + data.error, false);
@@ -361,11 +382,16 @@ async function buyItem(id) {
 }
 
 async function equipItem(id) {
-  const data = await fetch(`${API}/cosmetics/equip`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ cosmeticId: id }),
-  }).then(r => r.json());
+  let data;
+  try {
+    data = await requestShop('/cosmetics/equip', {
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({cosmeticId:id})
+    });
+  } catch(error) {
+    showToast('❌ '+error.message,false);
+    return;
+  }
 
   if (data.error) { showToast('❌ ' + data.error, false); return; }
   showToast('✅ Equipped! Changes take effect in-game.');
