@@ -5,12 +5,18 @@
   let lastState = null;
   function setBusy(yes) {
     pending = yes;
+    window.bjBusy = yes;
+    document.body.classList.toggle('game-pending', yes);
+    document.querySelectorAll('#chipsRow .chip').forEach(chip => {
+      if (yes) chip.classList.add('disabled');
+    });
     if(yes) ['dealBtn','hitBtn','standBtn','doubleBtn','splitBtn']
       .forEach(id => {const el=document.getElementById(id);if(el)el.disabled=true;});
   }
   async function send(path,body) {
     if(pending)return;
     setBusy(true);
+    const waitNotice=setTimeout(()=>setStatus('Connecting to the table…'),3200);
     try {
       const res=await fetch(root+path,{
         method:'POST',
@@ -24,7 +30,7 @@
     } catch(error){
       showToast(error.message);
       try{await restore();}catch{}
-    } finally{setBusy(false);refreshControls();}
+    } finally{clearTimeout(waitNotice);setBusy(false);refreshControls();}
   }
   function refreshControls() {
     if(pending)return;
@@ -34,7 +40,7 @@
     if(st.phase==='insurance'){
       enableBetting(false);
       document.getElementById('insuranceSub').textContent =
-        'Dealer shows an Ace — Insurance costs $'+st.insuranceCost;
+        'Dealer shows an Ace — Insurance costs '+st.insuranceCost+' chips';
       document.getElementById('insuranceModal').classList.remove('hidden');
       return;
     }
@@ -225,5 +231,8 @@
   };
   // Legacy client-authoritative result endpoints are disabled by the backend.
   window.saveResult=async()=>{};
-  restore().catch(e=>showToast(e.message));
+  restore().catch(e=>{
+    showToast('Could not load the table. Check your connection, then refresh.');
+    setStatus('Connection unavailable — refresh to retry');
+  });
 })();
