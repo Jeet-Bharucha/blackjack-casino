@@ -414,3 +414,25 @@ body.luxury-front{background:#090b12;color:#f6efe2}
 @media(prefers-reduced-motion:reduce){
  .luxury-front .bg-card{animation:none}
 }
+
+/* Small-phone ergonomics: keep five chips in one row and all four actions visible. */
+.luxury-multi .table-card{font:inherit;text-align:left;color:inherit;width:100%;cursor:pointer}
+.luxury-multi .table-card:focus-visible{outline:3px solid #ffebac;outline-offset:3px}
+@media(max-width:560px){
+  .luxury-multi .nav-logo-sub{display:none}
+  .luxury-multi .nav-right a[href="leaderboard.html"]{display:none}
+  .luxury-multi .nav{padding:9px 12px}
+}
+@media(max-width:460px){
+  .luxury-solo .scene{padding-top:70px;gap:10px;padding-bottom:15px}
+  .luxury-solo .table{height:clamp(285px,42svh,365px);padding-top:50px;padding-bottom:12px}
+  .luxury-solo .table-caption{font-size:10px;gap:5px}
+  .luxury-solo .hud-pill{font-size:8px;letter-spacing:1px;padding:5px 8px}
+  .luxury-solo .bottom-panel{padding:12px 10px;gap:10px}
+  .luxury-solo .chips-row{gap:5px}
+  .luxury-solo .chip{width:46px;min-width:46px;height:46px}
+  .luxury-solo .btn-clear{min-width:56px;padding:5px 8px}
+  .luxury-solo .btn-buy-chips{display:none}
+  .luxury-solo .info-item{min-width:100px}
+  .luxury-solo .info-value{font-size:18px}
+}
