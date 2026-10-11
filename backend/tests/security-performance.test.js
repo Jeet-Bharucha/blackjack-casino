@@ -39,6 +39,7 @@ test('profile validates both display name types and avatar types',()=>{
   assert.match(source,/validateAvatar\(avatar\)/);
   assert.match(source,/catch \(error\) \{ return res\.status\(400\)/);
   assert.match(source,/await db\.execute\(\`UPDATE users SET/);
+  assert.match(source,/express\.json\(\{ limit: '256kb' \}\)/);
 });
 test('multiplayer state omits repeated base64 avatar and chat history payloads',()=>{
   const source=read('backend/server.js');
@@ -76,4 +77,9 @@ test('password reset codes have TTL, account cooldown, memory limits and concurr
   assert.match(s,/entry\.processing=false/);
   assert.match(s,/if\(!\/\^\\d\{6\}\$\/\.test\(code\.trim\(\)\)/);
   assert.match(s,/signal: AbortSignal\.timeout\(10000\)/);
+});
+
+test('long running multiplayer chat does not grow browser DOM without limit',()=>{
+  const client=read('multiplayer.html');
+  assert.match(client,/while \(box\.childElementCount > 100\) box\.firstElementChild\.remove\(\)/);
 });
