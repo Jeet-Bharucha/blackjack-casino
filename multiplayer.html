@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Blackjack — Multiplayer</title>
+<title>Blackjack Casino Royale | Private Tables</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Cinzel:wght@400;600;700&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap');
   *{margin:0;padding:0;box-sizing:border-box;}
@@ -172,8 +172,9 @@
     *,*:before,*:after{animation-duration:0.01ms!important;transition-duration:0.01ms!important}
   }
 </style>
+<link rel="stylesheet" href="luxury-theme.css"/>
 </head>
-<body>
+<body class="luxury-multi">
 
 <nav class="nav">
   <div class="nav-logo">♠ BLACKJACK — MULTIPLAYER</div>
@@ -189,7 +190,7 @@
 
   <!-- LOBBY -->
   <div id="lobbyView">
-    <div class="lobby-title">🃏 Live Tables</div>
+    <div class="lobby-title">♠ The Private Salon</div>
     <div class="lobby-sub">Play with 1,000 temporary practice chips per table. Private rounds do not change your main balance or leaderboard.</div>
     <div class="lobby-actions">
       <button class="btn-create" onclick="createTable(false)">+ Public Table</button>
@@ -223,7 +224,7 @@
 
           <div class="mp-middle">
             <div>
-              <div class="mp-status" id="mpStatus">Waiting for players...</div>
+              <div class="mp-status" id="mpStatus" role="status" aria-live="polite">Waiting for players...</div>
               <div class="mp-timer" id="mpTimer" style="display:none"></div>
             </div>
           </div>
@@ -240,15 +241,15 @@
         <!-- Controls -->
         <div class="mp-controls">
           <div class="mp-info-row">
-            <div class="mp-info"><span class="mp-info-label">Balance</span><span class="mp-info-val green" id="mpBalance">$—</span></div>
-            <div class="mp-info"><span class="mp-info-label">My Bet</span><span class="mp-info-val" id="mpBetDisplay">$0</span></div>
+            <div class="mp-info"><span class="mp-info-label">Balance</span><span class="mp-info-val green" id="mpBalance">— chips</span></div>
+            <div class="mp-info"><span class="mp-info-label">My Bet</span><span class="mp-info-val" id="mpBetDisplay">0 chips</span></div>
           </div>
           <div class="mp-bet-row" id="mpChips">
-            <div class="mp-chip chip-1  disabled" onclick="mpBet(1)">$1</div>
-            <div class="mp-chip chip-5  disabled" onclick="mpBet(5)">$5</div>
-            <div class="mp-chip chip-10 disabled" onclick="mpBet(10)">$10</div>
-            <div class="mp-chip chip-25 disabled" onclick="mpBet(25)">$25</div>
-            <div class="mp-chip chip-100 disabled" onclick="mpBet(100)">$100</div>
+            <button type="button" class="mp-chip chip-1 disabled" aria-label="Add 1 virtual chips to bet" onclick="mpBet(1)">1</button>
+            <button type="button" class="mp-chip chip-5 disabled" aria-label="Add 5 virtual chips to bet" onclick="mpBet(5)">5</button>
+            <button type="button" class="mp-chip chip-10 disabled" aria-label="Add 10 virtual chips to bet" onclick="mpBet(10)">10</button>
+            <button type="button" class="mp-chip chip-25 disabled" aria-label="Add 25 virtual chips to bet" onclick="mpBet(25)">25</button>
+            <button type="button" class="mp-chip chip-100 disabled" aria-label="Add 100 virtual chips to bet" onclick="mpBet(100)">100</button>
           </div>
           <div class="mp-btn-row">
             <button class="mp-btn hit"    id="mpHit"    onclick="mpAction('mp_hit')"    disabled>Hit</button>
@@ -311,7 +312,7 @@ socket.on('table_created', ({ tableId, inviteCode }) => socket.emit('join_table'
 socket.on('joined_table', ({ tableId, seatIndex, balance, inviteCode }) => {
   currentPrivateInvite=inviteCode||null;
   currentTableId = tableId; mySeatIndex = seatIndex; myBalance = balance;
-  document.getElementById('mpBalance').textContent = '$' + balance;
+  document.getElementById('mpBalance').textContent = Number(balance).toLocaleString() + ' chips';
   showGame();
 });
 socket.on('table_update', state => renderTable(state));
@@ -337,7 +338,7 @@ socket.on('your_turn', ({ seatIndex }) => {
 socket.on('round_results', ({ results, dealerTotal, dealerCards }) => {
   showResults(results, dealerTotal);
   disableChips(); enableActions(false); myBet = 0;
-  document.getElementById('mpBetDisplay').textContent = '$0';
+  document.getElementById('mpBetDisplay').textContent = '0 chips';
   setTimeout(hideResults, 5500);
 });
 socket.on('error_msg', msg => showToast(msg));
@@ -434,7 +435,7 @@ function renderTable(state) {
       const isDone = seat.done;
       div.innerHTML = `
         <div class="seat-name">${esc(seat.username)}${i===mySeatIndex?' (You)':''}</div>
-        <div class="seat-bet">${seat.hasBet?'$'+seat.bet:''}</div>
+        <div class="seat-bet">${seat.hasBet?seat.bet+' chips':''}</div>
         <div class="seat-cards" id="seatCards${i}"></div>
         ${isDone?'<div class="seat-status done">Done</div>':i===state.currentSeat?'<div class="seat-status playing">Playing</div>':''}
       `;
@@ -450,7 +451,7 @@ function renderTable(state) {
   const mySeat = state.seats[mySeatIndex];
   if (mySeat) {
     myBalance = mySeat.balance;
-    document.getElementById('mpBalance').textContent = '$' + myBalance;
+    document.getElementById('mpBalance').textContent = Number(myBalance).toLocaleString() + ' chips';
   }
 
   // Chips
@@ -482,7 +483,7 @@ function mpBet(amount) {
   if (tablePhase !== 'betting') return;
   if (myBet + amount > myBalance) { showToast('Insufficient balance'); return; }
   myBet += amount;
-  document.getElementById('mpBetDisplay').textContent = '$' + myBet;
+  document.getElementById('mpBetDisplay').textContent = Number(myBet).toLocaleString() + ' chips';
   socket.emit('place_bet', { amount: myBet });
 }
 
@@ -536,7 +537,7 @@ function showResults(results, dealerTotal) {
     bannerClass = w?'win':l?'lose':'push';
     bannerTitle = w?'You Win!':l?'Dealer Wins':'Push';
     myBalance = myResult.newBalance;
-    document.getElementById('mpBalance').textContent = '$' + myBalance;
+    document.getElementById('mpBalance').textContent = Number(myBalance).toLocaleString() + ' chips';
   }
 
   document.getElementById('resultBannerTitle').textContent = bannerTitle;
