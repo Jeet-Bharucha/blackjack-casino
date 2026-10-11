@@ -559,12 +559,14 @@ function showResults(results, dealerTotal) {
   results.forEach(r => {
     r.handResults.forEach(h => {
       const isMe = r.seatIndex === mySeatIndex;
-      listHtml += `<div style="color:${h.result==='win'||h.result==='blackjack'||h.result==='dealer_bust'?'#4cff91':h.result==='push'?'#ffd764':'#ff6b6b'}">${isMe?'You':esc(r.username)}: ${h.total} — ${h.result} ${h.payout>0?'(+$'+(h.payout-r.handResults[0].payout/r.handResults.length|0)+')':''}</div>`;
+      const outcomeLabel=String(h.result).replace(/_/g,' ');
+      const payoutLabel=h.payout>0?' · '+Number(h.payout).toLocaleString()+' virtual chips returned':'';
+      listHtml += `<div style="color:${['win','blackjack','dealer_bust','double_win'].includes(h.result)?'#4cff91':h.result==='push'?'#ffd764':'#ff6b6b'}">${isMe?'You':esc(r.username)}: ${h.total} — ${outcomeLabel}${payoutLabel}</div>`;
     });
   });
 
   if (myResult) {
-    const w = myResult.handResults.some(h=>['win','blackjack','dealer_bust'].includes(h.result));
+    const w = myResult.handResults.some(h=>['win','blackjack','dealer_bust','double_win'].includes(h.result));
     const l = myResult.handResults.every(h=>['lose','bust'].includes(h.result));
     bannerClass = w?'win':l?'lose':'push';
     bannerTitle = w?'You Win!':l?'Dealer Wins':'Push';
