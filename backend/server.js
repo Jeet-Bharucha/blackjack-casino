@@ -63,6 +63,7 @@ app.use(cors({ origin(origin, cb) {
   return cb(null, !origin || allowedOrigins.includes(origin));
 } }));
 const requestCounters = new Map();
+let lastCounterPrune = 0;
 function throttle(maxAttempts, windowMs) {
   return (req, res, next) => {
     const key = req.path + ':' + req.ip, now = Date.now();
@@ -78,7 +79,8 @@ function throttle(maxAttempts, windowMs) {
     }
     // Keep the per-IP fallback throttle bounded; random IPs/paths must not
     // grow the map forever or trigger a full sweep on every request.
-    if (requestCounters.size >= 5000 && requestCounters.size % 100 === 0) {
+    if (requestCounters.size >= 5000 && now-lastCounterPrune>60000) {
+      lastCounterPrune=now;
       for (const [k, v] of requestCounters) if (v.expires <= now) requestCounters.delete(k);
     }
     while (requestCounters.size > 10000) requestCounters.delete(requestCounters.keys().next().value);
@@ -617,6 +619,12 @@ app.post('/api/login', throttle(15, 15 * 60 * 1000), async (req, res) => {
 // ── FORGOT / RESET PASSWORD ───────────────────────────
 // Codes are delivered by email only, never displayed by the API.
 const resetCodes = new Map();
+const MAX_RESET_CODES = 1000;
+function pruneResetCodes(now=Date.now()) {
+  for (const [key, entry] of resetCodes) {
+    if(entry.expires<=now)resetCodes.delete(key);
+  }
+}
 app.post('/api/forgot-password', throttle(5, 15 * 60 * 1000), async (req, res) => {
   const generic = { success: true, message: 'If the account exists, a reset code will be emailed.' };
   try {
@@ -625,6 +633,13 @@ app.post('/api/forgot-password', throttle(5, 15 * 60 * 1000), async (req, res) =
     if (!resendApiKey) return res.status(503).json({ error: 'Password reset email is not configured. Contact the site owner.' });
     const [rows] = await db.execute('SELECT id FROM users WHERE email=?', [email]);
     if (rows.length) {
+      const now=Date.now();
+      pruneResetCodes(now);
+      const existing=resetCodes.get(email);
+      // Keep the previous valid code and return the same generic response.
+      // Rate-limit by account as well as by IP to discourage email flooding.
+      if(existing && now-(existing.sentAt||0)<60000) return res.json(generic);
+      if(resetCodes.size>=MAX_RESET_CODES && !existing) return res.json(generic);
       const code = String(crypto.randomInt(100000, 1000000));
       const delivered = await sendEmail({
         to: email, subject: 'Your Blackjack Casino password reset code',
@@ -632,7 +647,7 @@ app.post('/api/forgot-password', throttle(5, 15 * 60 * 1000), async (req, res) =
       });
       if (delivered) resetCodes.set(email, {
         hash: crypto.createHash('sha256').update(code).digest('hex'),
-        expires: Date.now() + 15 * 60 * 1000, userId: rows[0].id, attempts: 0,
+        expires: Date.now() + 15 * 60 * 1000, userId: rows[0].id, attempts: 0, sentAt: now,
       });
     }
     return res.json(generic);
@@ -645,19 +660,27 @@ app.post('/api/reset-password', throttle(10, 15 * 60 * 1000), async (req, res) =
       return res.status(400).json({ error: 'Email, code and new password required' });
     if (newPassword.length < 10 || newPassword.length > 128)
       return res.status(400).json({ error: 'Password must be 10–128 characters' });
+    if(!/^\\d{6}$/.test(code.trim()) || !email.trim() || email.length>254)
+      return res.status(400).json({ error: 'Invalid or expired reset code' });
     const key = email.trim().toLowerCase(), entry = resetCodes.get(key);
     if (!entry || entry.expires < Date.now() || entry.attempts >= 5) {
       resetCodes.delete(key);
       return res.status(400).json({ error: 'Invalid or expired reset code' });
     }
+    if(entry.processing) return res.status(400).json({ error: 'Reset already in progress' });
     entry.attempts++;
     const actual = crypto.createHash('sha256').update(code.trim()).digest();
     if (!crypto.timingSafeEqual(actual, Buffer.from(entry.hash, 'hex')))
       return res.status(400).json({ error: 'Invalid or expired reset code' });
-    resetCodes.delete(key);
-    const hash = await bcrypt.hash(newPassword, 10);
-    await db.execute('UPDATE users SET password=?,token_version=token_version+1 WHERE id=?', [hash, entry.userId]);
-    return res.json({ success: true });
+    entry.processing=true;
+    try {
+      const hash = await bcrypt.hash(newPassword, 10);
+      await db.execute('UPDATE users SET password=?,token_version=token_version+1 WHERE id=?', [hash, entry.userId]);
+      resetCodes.delete(key);
+      return res.json({ success: true });
+    } finally {
+      entry.processing=false;
+    }
   } catch (e) { console.error('Password reset failed:', e.message); return res.status(500).json({ error: 'Unable to reset password' }); }
 });
 
