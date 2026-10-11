@@ -370,7 +370,7 @@ socket.on('error_msg', msg => {
 });
 
 // ── LOBBY ───────────────────────────────────────────
-function requestTables() { socket.emit('get_tables'); }
+function requestTables() { if(socket.connected)socket.emit('get_tables'); }
 function createTable(isPrivate=false) {
   const name = (me.username || 'Player') + "'s Table";
   socket.emit('create_table', { name, token, isPrivate });
@@ -452,7 +452,7 @@ function renderTable(state) {
   row.innerHTML = '';
   state.seats.forEach((seat, i) => {
     const div = document.createElement('div');
-    div.className = 'mp-seat' + (!seat?' empty':'') + (i===mySeatIndex?' my-seat':'') + (i===state.currentSeat?' active-seat':'');
+    div.className = 'mp-seat' + (!seat?' empty':'') + (i===mySeatIndex?' my-seat':'') + (i===state.currentSeat?' active-seat':'') + (seat && seat.connected === false?' seat-offline':'');
     if (!seat) {
       div.innerHTML = `<div class="seat-name" style="color:rgba(255,255,255,.2)">Empty</div><div class="seat-cards"></div>`;
     } else {
@@ -463,7 +463,7 @@ function renderTable(state) {
         <div class="seat-name">${esc(seat.username)}${i===mySeatIndex?' (You)':''}</div>
         <div class="seat-bet">${seat.hasBet?seat.bet+' chips':''}</div>
         <div class="seat-cards" id="seatCards${i}"></div>
-        ${isDone?'<div class="seat-status done">Done</div>':i===state.currentSeat?'<div class="seat-status playing">Playing</div>':''}
+        ${seat.connected === false?'<div class="seat-status done">Reconnecting…</div>':isDone?'<div class="seat-status done">Done</div>':i===state.currentSeat?'<div class="seat-status playing">Playing</div>':''}
       `;
       row.appendChild(div);
       const cardsEl = div.querySelector(`#seatCards${i}`);
@@ -477,11 +477,17 @@ function renderTable(state) {
   const mySeat = state.seats[mySeatIndex];
   if (mySeat) {
     myBalance = mySeat.balance;
+    myBet = ['betting','playing','dealing'].includes(state.phase) ? Number(mySeat.bet)||0 : 0;
     document.getElementById('mpBalance').textContent = Number(myBalance).toLocaleString() + ' chips';
+    document.getElementById('mpBetDisplay').textContent = myBet.toLocaleString() + ' chips';
   }
 
+  // Resynchronize controls after returning from a network interruption.
+  myTurn = socket.connected && state.phase === 'playing' && state.currentSeat === mySeatIndex;
+  enableActions(myTurn);
+
   // Chips
-  const canBet = state.phase === 'betting' && mySeatIndex !== -1;
+  const canBet = socket.connected && state.phase === 'betting' && mySeatIndex !== -1;
   document.getElementById('mpChips').querySelectorAll('.mp-chip').forEach(c => { c.classList.toggle('disabled', !canBet); c.disabled = !canBet; });
 }
 
@@ -506,7 +512,7 @@ function handTotal(cards) {
 
 // ── BETTING ────────────────────────────────────────
 function mpBet(amount) {
-  if (tablePhase !== 'betting') return;
+  if (!socket.connected || tablePhase !== 'betting') return;
   if (myBet + amount > myBalance) { showToast('Insufficient balance'); return; }
   myBet += amount;
   document.getElementById('mpBetDisplay').textContent = Number(myBet).toLocaleString() + ' chips';
@@ -579,7 +585,7 @@ function hideResults() {
 function esc(s){ if(!s) return ''; return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
 requestTables();
-setInterval(requestTables, 10000);
+setInterval(() => { if(!document.hidden)requestTables(); }, 15000);
 </script>
 </body>
 </html>
