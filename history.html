@@ -83,8 +83,8 @@
 
 <div class="page">
   <div class="page-header">
-    <div class="page-title">Game History</div>
-    <div class="page-sub">Last 100 hands played</div>
+    <h1 class="page-title">♠ YOUR PLAY HISTORY</h1>
+    <div class="page-sub">Your recent virtual-chip Blackjack rounds · No cash value</div>
   </div>
   <div id="statsSection"></div>
   <div id="content">
@@ -117,9 +117,9 @@ function resultBadge(result) {
 
 function profitDisplay(bet, payout) {
   const profit = (payout||0) - (bet||0);
-  if (profit > 0) return `<span class="payout-pos">+$${profit.toLocaleString()}</span>`;
-  if (profit < 0) return `<span class="payout-neg">-$${Math.abs(profit).toLocaleString()}</span>`;
-  return `<span class="payout-zero">$0</span>`;
+  if (profit > 0) return `<span class="payout-pos">+${profit.toLocaleString()} chips</span>`;
+  if (profit < 0) return `<span class="payout-neg">−${Math.abs(profit).toLocaleString()} chips</span>`;
+  return `<span class="payout-zero">0 chips</span>`;
 }
 
 function isWin(result) {
@@ -156,8 +156,8 @@ async function loadHistory() {
       <div class="stats-grid">
         <div class="stat-card"><div class="stat-val">${totalHands}</div><div class="stat-label">Hands Played</div></div>
         <div class="stat-card"><div class="stat-val ${winRate>=50?'green':'red'}">${winRate}%</div><div class="stat-label">Win Rate</div></div>
-        <div class="stat-card"><div class="stat-val green">${biggestWin>0?'+$'+biggestWin.toLocaleString():'—'}</div><div class="stat-label">Biggest Win</div></div>
-        <div class="stat-card"><div class="stat-val ${profitClass}">${profitSign}$${Math.abs(totalProfit).toLocaleString()}</div><div class="stat-label">Total Profit/Loss</div></div>
+        <div class="stat-card"><div class="stat-val green">${biggestWin>0?'+'+biggestWin.toLocaleString()+' chips':'—'}</div><div class="stat-label">Biggest Win</div></div>
+        <div class="stat-card"><div class="stat-val ${profitClass}">${profitSign}${Math.abs(totalProfit).toLocaleString()} chips</div><div class="stat-label">Total Profit/Loss</div></div>
       </div>`;
 
     const rows = data.map(g => {
@@ -165,16 +165,16 @@ async function loadHistory() {
       const dStr = (g.dealer_hand||'').replace(/&/g,'&amp;').replace(/</g,'&lt;');
       return `<tr>
         <td>${resultBadge(g.result)}</td>
-        <td><span style="font-family:'Playfair Display',serif;color:#ffd764;">$${Number(g.bet||0).toLocaleString()}</span></td>
+        <td><span style="font-family:'Playfair Display',serif;color:#ffd764;">${Number(g.bet||0).toLocaleString()} chips</span></td>
         <td>${profitDisplay(g.bet, g.payout)}</td>
-        <td class="balance-text">$${Number(g.balance_after||0).toLocaleString()}</td>
+        <td class="balance-text">${Number(g.balance_after||0).toLocaleString()} chips</td>
         <td><div class="hand-text" title="${pStr}">${pStr||'—'}</div><div class="hand-text" title="${dStr}" style="color:rgba(255,120,120,.4);">${dStr||'—'}</div></td>
         <td class="date-text">${formatDate(g.played_at)}</td>
       </tr>`;
     }).join('');
 
     document.getElementById('content').innerHTML = `
-      <div class="card-wrap">
+      <div class="card-wrap" role="region" tabindex="0" aria-label="Scrollable game history table">
         <table class="gh-table">
           <thead><tr>
             <th>Result</th>
