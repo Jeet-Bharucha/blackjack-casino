@@ -4,7 +4,7 @@
 <meta charset="UTF-8"/>
 <link rel="icon" type="image/svg+xml" href="favicon.svg"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Blackjack</title>
+<title>Blackjack Casino Royale | Free-Play Luxury Table</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Cinzel:wght@400;600;700&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap');
   *{margin:0;padding:0;box-sizing:border-box;}
@@ -265,10 +265,11 @@
   @media(prefers-reduced-motion:reduce){.solo-card-appear{animation:none}}
   @media (prefers-reduced-motion:reduce) {*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
 </style>
+<link rel="stylesheet" href="luxury-theme.css"/>
 </head>
-<body>
+<body class="luxury-solo">
 
-<div class="mobile-menu" id="mobileMenu">
+<div class="mobile-menu" id="mobileMenu" aria-label="Mobile navigation">
   <a class="nav-link" href="multiplayer.html">🃏 Multiplayer</a>
   <a class="nav-link" href="tournament.html">🏆 Tournaments</a>
   <a class="nav-link" href="shop.html">🎨 Shop</a>
@@ -301,7 +302,8 @@
     <a class="nav-link" href="leaderboard.html">Leaderboard</a>
     <a class="nav-link" href="profile.html">👤 Profile</a>
     <span class="nav-link" onclick="logout()">Sign Out</span>
-    <button class="hamburger" onclick="toggleMobileMenu()" aria-label="Menu">
+    <button class="help-toggle" type="button" onclick="openLuxuryHelp()" aria-label="How to play and settings" title="Rules and settings">?</button>
+    <button class="hamburger" onclick="toggleMobileMenu()" aria-label="Open navigation menu" aria-expanded="false" aria-controls="mobileMenu">
       <span></span><span></span><span></span>
     </button>
   </div>
@@ -331,8 +333,9 @@
   </div>
 </div>
 
-<div class="scene">
-  <div class="table" id="tableEl">
+<main class="scene">
+  <div class="table-caption"><span class="hud-pill">TABLE 01</span><strong>ROYAL BLACKJACK</strong><span class="hud-pill">100% FREE PLAY</span></div>
+  <div class="table" id="tableEl" aria-label="Solo Blackjack table">
     <div class="table-text">Blackjack Pays 3 to 2 · Dealer Must Stand on 17</div>
     <div class="shoe-bar"><div class="shoe-fill" id="shoeBar" style="height:100%"></div></div>
     <div class="shuffle-notice" id="shuffleNotice">🔀 Shuffling Shoe...</div>
@@ -349,7 +352,7 @@
     </div>
 
     <div class="middle-area">
-      <div class="status-msg" id="statusMsg">Place your bet and deal</div>
+      <div class="status-msg" id="statusMsg" role="status" aria-live="polite" aria-atomic="true">Place your bet and deal</div>
     </div>
 
     <div class="player-zone">
@@ -360,25 +363,50 @@
 
   <div class="bottom-panel">
     <div class="bet-info">
-      <div class="info-item"><span class="info-label">Balance</span><span class="info-value balance" id="balanceDisplay">$—</span></div>
-      <div class="info-item"><span class="info-label">Bet</span><span class="info-value" id="betDisplay">$0</span></div>
+      <div class="info-item"><span class="info-label">Balance</span><span class="info-value balance" id="balanceDisplay">— chips</span></div>
+      <div class="info-item"><span class="info-label">Bet</span><span class="info-value" id="betDisplay">0 chips</span></div>
     </div>
-    <div class="chips-row" id="chipsRow">
-      <div class="chip chip-1"   onclick="placeBet(1)">$1</div>
-      <div class="chip chip-5"   onclick="placeBet(5)">$5</div>
-      <div class="chip chip-10"  onclick="placeBet(10)">$10</div>
-      <div class="chip chip-25"  onclick="placeBet(25)">$25</div>
-      <div class="chip chip-100" onclick="placeBet(100)">$100</div>
+    <div class="chips-row" id="chipsRow" aria-label="Add virtual chips to bet">
+      <button type="button" class="chip chip-1" data-value="1" aria-label="Add 1 chip to bet" onclick="placeBet(1)">1</button>
+      <button type="button" class="chip chip-5" data-value="5" aria-label="Add 5 chips to bet" onclick="placeBet(5)">5</button>
+      <button type="button" class="chip chip-10" data-value="10" aria-label="Add 10 chips to bet" onclick="placeBet(10)">10</button>
+      <button type="button" class="chip chip-25" data-value="25" aria-label="Add 25 chips to bet" onclick="placeBet(25)">25</button>
+      <button type="button" class="chip chip-100" data-value="100" aria-label="Add 100 chips to bet" onclick="placeBet(100)">100</button>
       <button class="btn btn-clear" onclick="clearBet()">Clear</button>
       <span class="btn btn-buy-chips" title="Chips have no cash value. Earn more with daily bonuses.">♠ Free Play Only</span>
     </div>
-    <div class="action-row">
+    <div class="action-row" aria-label="Blackjack actions">
       <button class="btn btn-deal"   id="dealBtn"   onclick="startDeal()">Deal</button>
       <button class="btn btn-hit"    id="hitBtn"    onclick="hit()"        disabled>Hit</button>
       <button class="btn btn-stand"  id="standBtn"  onclick="stand()"      disabled>Stand</button>
       <button class="btn btn-double" id="doubleBtn" onclick="doubleDown()" disabled>Double</button>
       <button class="btn btn-split"  id="splitBtn"  onclick="split()"      disabled>Split</button>
     </div>
+    <p class="luxury-shortcuts">Keyboard: <kbd>1–5</kbd> chips · <kbd>D</kbd> deal · <kbd>H</kbd> hit · <kbd>S</kbd> stand · <kbd>X</kbd> double · <kbd>P</kbd> split</p>
+  </div>
+</main>
+
+<!-- Help and sound settings -->
+<div class="modal-overlay hidden" id="luxuryHelpPanel" role="dialog" aria-modal="true" aria-labelledby="luxuryHelpTitle">
+  <div class="modal-box luxury-help">
+    <button type="button" class="close-help" id="closeLuxuryHelp" onclick="closeLuxuryHelp()" aria-label="Close help panel">×</button>
+    <h2 id="luxuryHelpTitle">♠ The Royal Table</h2>
+    <p>Welcome to free-play Blackjack. Win by getting closer to 21 than the dealer without going over. All chips are virtual and have no monetary value.</p>
+    <h3>HOW TO PLAY</h3>
+    <ul>
+      <li><strong>Bet:</strong> tap a chip, then Deal. Cards are dealt in order.</li>
+      <li><strong>Hit:</strong> take another card. <strong>Stand:</strong> keep your hand.</li>
+      <li><strong>Double:</strong> double your stake and take exactly one card, if allowed.</li>
+      <li><strong>Split:</strong> split an eligible pair into two hands, if allowed.</li>
+      <li><strong>Blackjack:</strong> a natural 21 pays 3 to 2 in virtual chips. Dealer stands on 17.</li>
+    </ul>
+    <h3>SETTINGS</h3>
+    <label for="luxuryVolume">Game sound <span id="luxuryVolumeLabel">55%</span></label>
+    <input id="luxuryVolume" type="range" min="0" max="100" value="55" aria-label="Game sound volume" style="display:block;width:100%;margin:12px 0 18px;accent-color:#edce84"/>
+    <label class="reduced-motion-toggle"><input type="checkbox" id="luxuryReduceMotion"/>Reduce card and win animations</label>
+    <h3>KEYBOARD SHORTCUTS</h3>
+    <p>1–5 = chips · D = Deal · H = Hit · S = Stand · X = Double · P = Split · C = Clear · ? = Help · Esc = Close.</p>
+    <p class="help-note">🛡️ No real-money betting, purchases, withdrawals, or prizes. Earn more chips with daily bonuses.</p>
   </div>
 </div>
 
@@ -723,7 +751,7 @@ async function checkDailyBonus(){
     if(res.ok){
       const d=await res.json();
       balance=d.newBalance; updateUI();
-      document.getElementById('bonusAmount').textContent='+$'+d.bonus;
+      document.getElementById('bonusAmount').textContent='+'+Number(d.bonus).toLocaleString()+' chips';
       document.getElementById('bonusStreak').textContent=`Day ${d.streak} Streak 🔥`;
       document.getElementById('bonusModal').classList.remove('hidden');
     }
@@ -742,7 +770,7 @@ function showAchievementToast(ach){
 }
 
 // ── UI ─────────────────────────────────────────────
-function updateUI(){ document.getElementById('balanceDisplay').textContent='$'+balance; document.getElementById('betDisplay').textContent='$'+currentBet; }
+function updateUI(){ document.getElementById('balanceDisplay').textContent=Number(balance).toLocaleString()+' chips'; document.getElementById('betDisplay').textContent=Number(currentBet).toLocaleString()+' chips'; }
 function setStatus(msg){ const el=document.getElementById('statusMsg'); el.className='status-msg'; el.textContent=msg; requestAnimationFrame(()=>el.classList.add('show')); }
 function hideStatus(){ document.getElementById('statusMsg').classList.remove('show'); }
 function showToast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2200); }
@@ -765,7 +793,7 @@ function enableActions(canDouble,canSplitHand){
 const RED=new Set(['♥','♦']);
 function buildCardEl(card,faceDown=false){
   const w=document.createElement('div'); w.className='card-wrapper dealing'; w.dataset.faceDown=faceDown?'1':'0';
-  w.style.cssText = getCardAnimStyle();
+  w.dataset.anim=equippedCosmetics.card_anim || 'classic';
   const inner=document.createElement('div'); inner.className='card-inner'+(faceDown?' flipped':'');
   const front=document.createElement('div'); front.className='card-face '+(RED.has(card.suit)?'red':'black');
   const top=document.createElement('div'); top.className='card-corner'; top.innerHTML=`<span class="card-rank">${card.rank}</span><span class="card-suit-small">${card.suit}</span>`;
@@ -801,8 +829,8 @@ function renderPlayerHands(){
 }
 
 // ── BET ────────────────────────────────────────────
-function placeBet(amount){ if(gamePhase!=='bet') return; if(audioCtx.state==='suspended') audioCtx.resume(); if(currentBet+amount>balance){showToast('Insufficient balance');return;} currentBet+=amount; playChipSound(); updateUI(); document.getElementById('dealBtn').disabled=false; }
-function clearBet(){ if(gamePhase!=='bet') return; currentBet=0; updateUI(); document.getElementById('dealBtn').disabled=true; }
+function placeBet(amount){ if(gamePhase!=='bet'||window.bjBusy) return; if(audioCtx.state==='suspended') audioCtx.resume(); if(currentBet+amount>balance){showToast('Insufficient balance');return;} currentBet+=amount; playChipSound(); updateUI(); document.getElementById('dealBtn').disabled=false; }
+function clearBet(){ if(gamePhase!=='bet'||window.bjBusy) return; currentBet=0; updateUI(); document.getElementById('dealBtn').disabled=true; }
 
 // ── DEAL ───────────────────────────────────────────
 async function startDeal(){
@@ -1030,7 +1058,7 @@ function showResultPopup(cls,title,sub,profit){
   document.getElementById('resultTitle').textContent=title;
   document.getElementById('resultSub').textContent=sub;
   const amt=document.getElementById('resultAmount');
-  amt.textContent=profit>0?'+$'+profit:profit<0?'-$'+Math.abs(profit):'$0';
+  amt.textContent=(profit>0?'+':profit<0?'−':'')+Math.abs(profit).toLocaleString()+' chips';
   amt.style.color=profit>0?'#4cff91':profit<0?'#ff4444':'#ffd764';
   popup.className=`result-popup ${cls}`;
   setTimeout(()=>popup.classList.add('show'),400);
@@ -1055,14 +1083,18 @@ function spawnConfetti(){
   for(let i=0;i<60;i++) setTimeout(()=>{ const c=document.createElement('div'); c.className='confetti-piece'; c.style.left=Math.random()*100+'vw'; c.style.top='-10px'; c.style.background=colors[Math.floor(Math.random()*colors.length)]; c.style.transform=`rotate(${Math.random()*360}deg)`; c.style.animationDuration=(1.5+Math.random())+'s'; document.body.appendChild(c); setTimeout(()=>c.remove(),2500); },Math.random()*600);
 }
 
-function toggleMobileMenu(){ document.getElementById('mobileMenu').classList.toggle('open'); }
-document.addEventListener('click', e => { const m=document.getElementById('mobileMenu'); if(m.classList.contains('open')&&!m.contains(e.target)&&!e.target.closest('.hamburger')) m.classList.remove('open'); });
+function toggleMobileMenu(){
+  const open=document.getElementById('mobileMenu').classList.toggle('open');
+  document.querySelector('.hamburger')?.setAttribute('aria-expanded',String(open));
+}
+document.addEventListener('click', e => { const m=document.getElementById('mobileMenu'); if(m.classList.contains('open')&&!m.contains(e.target)&&!e.target.closest('.hamburger')) { m.classList.remove('open'); document.querySelector('.hamburger')?.setAttribute('aria-expanded','false'); } });
 
 // ── INIT ───────────────────────────────────────────
 buildShoe(6); loadUser(); loadCosmetics(); setStatus('Place your bet and deal'); enableBetting(true);
 document.addEventListener('click',()=>{if(audioCtx.state==='suspended') audioCtx.resume();},{once:true});
 </script>
 <script src="solo-client.js"></script>
+<script src="luxury-ui.js"></script>
 <script src="challenges-client.js"></script>
 <script src="cookie-banner.js"></script>
 </body>
