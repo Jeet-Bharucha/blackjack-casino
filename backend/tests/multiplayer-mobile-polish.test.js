@@ -34,6 +34,19 @@ test('mobile hands are not clipped: current player is full-width and other seats
   assert.doesNotMatch(styles,/\.mp-seat\.my-seat\s*\{[^}]*display:none/);
 });
 
+test('betting chips are always below the player cards on narrow phones', () => {
+  // Previously, constrained viewport heights made the chip betting controls
+  // cover the last row of cards. Explicit auto-height grid rows prevent that.
+  assert.match(styles, /@media\(max-width:700px\)/);
+  assert.match(styles, /\.luxury-multi \.table-area\{\s*display:grid/);
+  assert.match(styles, /grid-template-rows:max-content max-content/);
+  assert.match(styles, /\.luxury-multi \.mp-table\{\s*position:relative;grid-row:1/);
+  assert.match(styles, /\.luxury-multi \.mp-controls\{\s*position:relative;grid-row:2/);
+  assert.match(styles, /\.luxury-multi \.game-layout\{\s*display:block;flex:none/);
+  assert.match(styles, /height:auto!important;max-height:none/);
+  assert.match(styles, /\.luxury-multi \.layout\{\s*display:block/);
+});
+
 test('live state reconciliation preserves card elements across socket updates', () => {
   // Minimal DOM simulation so the card reconciler can be exercised without
   // opening a real game connection or changing persisted player accounts.
