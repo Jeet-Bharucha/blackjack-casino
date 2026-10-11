@@ -1084,7 +1084,7 @@ function createTable(name,isPrivate=false){ return {id:crypto.randomBytes(8).toS
   isPrivate,inviteCode:isPrivate?crypto.randomBytes(12).toString('hex'):null,
   seats:[null,null,null,null,null],phase:'waiting',shoe:buildShoe(),dealerCards:[],currentSeat:-1,betTimer:null,turnTimer:null,chat:[]}; }
 
-function tablePublicState(t){ return {id:t.id,name:t.name,phase:t.phase,isPrivate:t.isPrivate,inviteCode:t.inviteCode,currentSeat:t.currentSeat,dealerCards:t.phase==='playing'?[t.dealerCards[0],{rank:'?',suit:'?'}]:t.dealerCards,seats:t.seats.map(s=>s?{username:s.username,displayName:s.displayName||s.username,avatar:s.avatar,vipTier:s.vipTier||'Bronze',bet:s.bet,hasBet:s.hasBet,ready:s.ready,done:s.done,hands:s.hands,balance:s.balance}:null),chat:t.chat.slice(-50),shoeSize:t.shoe.length}; }
+function tablePublicState(t){ return {id:t.id,name:t.name,phase:t.phase,isPrivate:t.isPrivate,inviteCode:t.inviteCode,currentSeat:t.currentSeat,dealerCards:t.phase==='playing'?[t.dealerCards[0],{rank:'?',suit:'?'}]:t.dealerCards,seats:t.seats.map(s=>s?{username:s.username,displayName:s.displayName||s.username,avatar:s.avatar,vipTier:s.vipTier||'Bronze',bet:s.bet,hasBet:s.hasBet,ready:s.ready,done:s.done,hands:s.hands,balance:s.balance,connected:!!s.socketId}:null),chat:t.chat.slice(-50),shoeSize:t.shoe.length}; }
 function getTableList(){ return Array.from(tables.values()).filter(t=>!t.isPrivate).map(t=>({id:t.id,name:t.name,phase:t.phase,playerCount:t.seats.filter(Boolean).length})); }
 function broadcastTableList(){ io.emit('table_list',getTableList()); }
 function broadcastTable(t){ io.to(t.id).emit('table_update',tablePublicState(t)); }
