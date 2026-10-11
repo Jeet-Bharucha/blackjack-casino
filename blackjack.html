@@ -787,7 +787,7 @@ function hideStatus(){ document.getElementById('statusMsg').classList.remove('sh
 function showToast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2200); }
 
 function enableBetting(e){
-  document.getElementById('chipsRow').querySelectorAll('.chip').forEach(c=>c.classList.toggle('disabled',!e));
+  document.getElementById('chipsRow').querySelectorAll('.chip').forEach(c=>{ c.classList.toggle('disabled',!e); c.disabled=!e; });
   document.getElementById('dealBtn').disabled=!e||currentBet===0;
   ['hitBtn','standBtn','doubleBtn','splitBtn'].forEach(id=>document.getElementById(id).disabled=true);
 }
@@ -797,7 +797,7 @@ function enableActions(canDouble,canSplitHand){
   document.getElementById('standBtn').disabled=false;
   document.getElementById('doubleBtn').disabled=!canDouble;
   document.getElementById('splitBtn').disabled=!canSplitHand;
-  document.getElementById('chipsRow').querySelectorAll('.chip').forEach(c=>c.classList.add('disabled'));
+  document.getElementById('chipsRow').querySelectorAll('.chip').forEach(c=>{ c.classList.add('disabled'); c.disabled=true; });
 }
 
 // ── CARD RENDERING ────────────────────────────────
