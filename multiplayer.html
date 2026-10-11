@@ -177,7 +177,7 @@
 <body class="luxury-multi">
 
 <nav class="nav">
-  <div class="nav-logo">♠ BLACKJACK — MULTIPLAYER</div>
+  <div class="nav-logo">♠ BLACKJACK <span class="nav-logo-sub">SOCIAL TABLES</span></div>
   <div class="nav-right">
     <span class="nav-user" id="navUser">...</span>
     <a class="nav-link" href="blackjack.html">Single Player</a>
@@ -390,11 +390,11 @@ function renderLobby(tables) {
   const grid = document.getElementById('tablesGrid');
   if (!tables.length) { grid.innerHTML='<div class="no-tables">No tables yet — create one!</div>'; return; }
   grid.innerHTML = tables.map(t => `
-    <div class="table-card" onclick="joinTable('${t.id}')">
+    <button type="button" class="table-card" onclick="joinTable('${t.id}')">
       <div class="table-card-name">${esc(t.name)}</div>
       <div class="table-card-info">${t.playerCount}/5 players</div>
       <span class="table-card-status status-${t.phase}">${t.phase}</span>
-    </div>
+    </button>
   `).join('');
 }
 
