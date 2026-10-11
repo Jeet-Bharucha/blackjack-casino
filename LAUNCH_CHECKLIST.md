@@ -28,3 +28,12 @@ Use at least Chrome desktop, Safari iPhone or iOS simulator, and Chrome Android 
 - This frontend polish does **not** change backend routes, account records, balances, RNG, payout math or player passwords.
 - Search snippets and a sitemap make public pages easier to discover; they do not guarantee search rankings or ad network acceptance.
 - For a launch, use a custom domain, support contact, real device testing and privacy/legal review when practical.
+
+## Release follow-up checklist (phases 1–4)
+
+- **Multiplayer reconnection:** join with two real sessions, start a round and simulate a 10-second Wi-Fi outage. Reconnect within 30 seconds and confirm the original practice balance, bet and cards; disconnect for longer than 30 seconds and confirm the seat is released. A Render restart still loses all practice tables by design.
+- **Self-exclusion:** test with a disposable test account only. After excluding, an existing token must be rejected by protected HTTP routes and further socket room creation/join. **Do not test on anyone's primary account**, since early reversal is intentionally unavailable.
+- **Reward concurrency:** using a **test** account eligible for a weekly bonus, send two requests at once and verify only one virtual-chip credit occurs. Never alter a real player's stored balance to manufacture a test.
+- **Security regression:** confirm backend source/log URLs such as `/backend/server.js`, `/backend/server.log`, `/backend/.env` on **Render** return 404. Check Vercel separately, since GitHub itself is public. Revoke old database/Stripe credentials from historical git exposure.
+- **Social sharing:** verify native share sheet on iOS/Android and clipboard fallback on desktop with user gesture; never auto-share or solicit contact lists.
+- **Monetization:** follow `MONETIZATION_READINESS.md` for advertiser/publisher distinctions, no-prize legal review, operator contact, ad approval and domain authorization. Do not deploy ad tags before approved accounts.
