@@ -1,0 +1,231 @@
+/* Multiplayer-specific card motion and small-screen table layout.
+   Reflow/visibility only — game state and winnings remain server controlled. */
+.luxury-multi .mp-table{overflow:visible}
+.luxury-multi .mp-table::before,.luxury-multi .mp-table::after{pointer-events:none}
+.luxury-multi .mp-dealer-zone,.luxury-multi .mp-middle,.luxury-multi .mp-players-row{
+  position:relative;z-index:1;
+}
+.luxury-multi .mp-hand{gap:0}
+.luxury-multi .mini-card{
+  width:42px;height:61px;flex:0 0 42px;
+  margin-inline:-5px;padding:4px 5px;
+  border-radius:5px;box-shadow:0 4px 13px #0009;
+  transform-origin:center 85%;backface-visibility:hidden;
+}
+.luxury-multi .mini-rank{font-size:13px;line-height:1.05}
+.luxury-multi .mini-suit{font-size:15px;line-height:1}
+.luxury-multi .mini-card.face-down::after{font-size:23px}
+.luxury-multi .mp-seat{min-width:0;max-width:100%;overflow:visible}
+.luxury-multi .seat-cards{width:100%;max-width:100%;min-height:69px;overflow:visible}
+.luxury-multi .mp-players-row{align-items:flex-end;gap:5px}
+.luxury-multi .mp-players-row .seat-name{max-width:100%;text-align:center}
+.luxury-multi .mp-players-row .seat-bet{white-space:nowrap;font-variant-numeric:tabular-nums}
+.luxury-multi .mp-players-row .seat-status{text-align:center}
+.luxury-multi .mp-dealer-zone .mini-card{width:54px;height:77px;flex-basis:54px}
+.luxury-multi .mp-dealer-zone .mini-rank{font-size:17px}
+.luxury-multi .mp-dealer-zone .mini-suit{font-size:23px}
+.luxury-multi .mp-dealer-zone .mini-card.face-down::after{font-size:29px}
+.luxury-multi .mp-table-text{z-index:1}
+@keyframes royalCardDeal{
+  0%{opacity:0;transform:translate3d(0,-23px,0) rotate(-7deg) scale(.92)}
+  70%{opacity:1;transform:translate3d(0,3px,0) rotate(1deg) scale(1.02)}
+  100%{opacity:1;transform:translate3d(0,0,0) rotate(0) scale(1)}
+}
+@keyframes royalCardTurn{
+  0%{opacity:.35;transform:perspective(500px) rotateY(80deg)}
+  100%{opacity:1;transform:perspective(500px) rotateY(0)}
+}
+.luxury-multi .mini-card.mp-card-deal{
+  animation:royalCardDeal 400ms cubic-bezier(.18,.7,.26,1) both;
+  animation-delay:var(--card-enter-delay,0ms);
+}
+.luxury-multi .mini-card.mp-card-flip{
+  animation:royalCardTurn 320ms cubic-bezier(.2,.7,.3,1) both;
+}
+.luxury-multi .mp-seat.my-seat{border-color:#e8c887a3}
+.luxury-multi .mp-seat.seat-offline{opacity:.7}
+.luxury-multi .mp-score{z-index:2}
+/* Landscape tablets: give the table room instead of forcing a narrow ellipse. */
+@media(max-width:960px){
+  .luxury-multi .game-layout{
+    flex-direction:column;overflow:visible;min-width:0;align-items:stretch
+  }
+  .luxury-multi .layout{height:auto;min-height:calc(100svh - 62px)}
+  .luxury-multi .table-area{width:100%;min-width:0;padding:14px 12px}
+  .luxury-multi .mp-table{
+    width:min(100%,780px);height:auto;min-height:395px;
+    padding:45px 30px 18px;gap:8px;
+  }
+  .luxury-multi .chat-panel{
+    width:min(100%,780px);align-self:center;min-height:145px;max-height:205px;
+    border:1px solid #ba995d55;border-radius:14px;margin:12px 0 26px;
+  }
+  .luxury-multi .mp-controls{width:min(100%,780px);margin:12px auto 0}
+}
+@media(max-width:700px){
+  /* The phone layout is intentionally a rounded RECTANGLE, not a tiny oval.
+     The current player's hand gets a full-width first row. */
+  .luxury-multi .mp-table{
+    border-radius:25px;border-width:7px;
+    min-height:0;height:auto;
+    padding:15px 12px 16px;gap:9px;
+    justify-content:flex-start;overflow:visible;
+  }
+  .luxury-multi .mp-table::after{inset:8px}
+  .luxury-multi .mp-table-text{
+    position:relative;top:auto;left:auto;transform:none;
+    order:0;text-align:center;white-space:normal;
+    width:100%;font-size:9px;letter-spacing:.55px;line-height:1.4;
+  }
+  .luxury-multi .mp-dealer-zone{order:1;gap:6px;width:100%}
+  .luxury-multi .mp-dealer-zone .mp-hand{min-height:89px}
+  .luxury-multi .mp-dealer-zone .mp-zone-label{font-size:10px}
+  .luxury-multi .mp-middle{order:2;flex:0 0 auto;min-height:45px}
+  .luxury-multi .mp-status{font-size:12px;letter-spacing:.6px;line-height:1.35}
+  .luxury-multi .mp-timer{font-size:21px}
+  .luxury-multi .mp-players-row{
+    order:3;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));
+    gap:6px;width:100%;align-items:stretch;justify-items:stretch;
+    overflow:visible;
+  }
+  .luxury-multi .mp-seat{
+    width:100%;min-width:0;max-width:100%;
+    padding:6px 2px;gap:4px;
+    background:rgba(5,10,14,.38);
+    border:1px solid rgba(240,199,114,.16);border-radius:9px;
+  }
+  .luxury-multi .mp-seat.my-seat{
+    order:-1;grid-column:1/-1;min-height:148px;
+    padding:10px 12px;gap:5px;
+    background:rgba(11,23,26,.86);
+    border:2px solid #f5d18f;
+    box-shadow:inset 0 1px 18px #ddbc7821,0 0 24px #d4a64b2a;
+  }
+  .luxury-multi .mp-seat.my-seat .seat-name{
+    font-size:13px;letter-spacing:1.1px;color:#ffe3a1
+  }
+  .luxury-multi .mp-seat.my-seat .seat-name::before{
+    content:'YOUR HAND · ';color:#e8d3a8;font-size:10px
+  }
+  .luxury-multi .mp-seat.my-seat .seat-cards{
+    width:100%;max-width:100%;min-height:91px;
+    padding:4px 7px;display:flex;justify-content:safe center;
+    overflow-x:auto;overflow-y:hidden;
+    overscroll-behavior-x:contain;
+    scrollbar-color:#b69a60 transparent;scrollbar-width:thin;
+  }
+  .luxury-multi .mp-seat.my-seat .mini-card{
+    width:61px;height:87px;flex:0 0 61px;
+    margin-inline:-4px;padding:5px 7px;
+  }
+  .luxury-multi .mp-seat.my-seat .mini-rank{font-size:20px}
+  .luxury-multi .mp-seat.my-seat .mini-suit{font-size:26px}
+  .luxury-multi .mp-seat.my-seat .mini-card.face-down::after{font-size:32px}
+  .luxury-multi .mp-seat:not(.my-seat) .seat-name{
+    max-width:100%;font-size:clamp(8px,2.3vw,11px);
+    line-height:1.4;letter-spacing:0;
+  }
+  .luxury-multi .mp-seat:not(.my-seat) .seat-bet{
+    max-width:100%;font-size:9px;white-space:normal;text-align:center
+  }
+  .luxury-multi .mp-seat:not(.my-seat) .seat-cards{
+    display:flex;justify-content:safe center;align-items:center;
+    width:100%;max-width:100%;min-height:52px;
+    padding:3px 2px;overflow-x:auto;overflow-y:hidden;
+    overscroll-behavior-x:contain;
+    scrollbar-width:thin;scrollbar-color:#b69a60 transparent;
+  }
+  .luxury-multi .mp-seat:not(.my-seat) .mini-card{
+    width:28px;height:43px;flex:0 0 28px;
+    margin-inline:-4px;padding:3px 3px;
+  }
+  .luxury-multi .mp-seat:not(.my-seat) .mini-rank{font-size:10px}
+  .luxury-multi .mp-seat:not(.my-seat) .mini-suit{font-size:12px}
+  .luxury-multi .mp-seat:not(.my-seat) .mini-card.face-down::after{font-size:15px}
+  .luxury-multi .mp-seat:not(.my-seat) .seat-status{
+    font-size:8px;letter-spacing:0;padding:3px 2px;
+    max-width:100%;overflow-wrap:anywhere;
+  }
+  .luxury-multi .mp-controls{
+    min-width:0;width:100%;margin:12px 0 0;padding:13px 11px 15px;
+    border-radius:15px;gap:11px;
+  }
+  .luxury-multi .mp-info-row{gap:clamp(15px,7vw,65px)}
+  .luxury-multi .mp-info-val{font-size:20px}
+  .luxury-multi .mp-bet-row{display:flex;flex-wrap:wrap;gap:9px}
+  .luxury-multi .mp-btn-row{
+    width:100%;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px
+  }
+  .luxury-multi .mp-btn-row .mp-btn{min-width:0;width:100%;min-height:49px}
+  .luxury-multi .mp-btn-row .mp-btn.leave{grid-column:1/-1}
+  .luxury-multi .chat-panel{max-height:185px;min-height:150px;margin:12px 0 25px}
+  /* Results are placed after the visible cards, not as a covering overlay. */
+  .luxury-multi .result-banner{
+    position:relative;top:auto;left:auto;order:4;
+    transform:none;display:none;opacity:0;pointer-events:none;
+    width:100%;max-width:100%;max-height:none;overflow:visible;
+    padding:15px 14px;border-radius:17px;
+  }
+  .luxury-multi .result-banner.show{
+    display:block;opacity:1;transform:none;
+  }
+  .luxury-multi .result-banner-title{font-size:18px}
+}
+@media(max-width:375px){
+  .luxury-multi .table-area{padding:9px 6px}
+  .luxury-multi .mp-table{padding:12px 8px 13px;gap:7px}
+  .luxury-multi .mp-seat.my-seat{padding:9px 6px}
+  .luxury-multi .mp-seat.my-seat .mini-card{width:56px;flex-basis:56px;height:81px}
+  .luxury-multi .mp-seat:not(.my-seat) .mini-card{width:26px;flex-basis:26px;height:40px}
+  .luxury-multi .mp-bet-row{gap:6px}
+  .luxury-multi .mp-chip{min-width:46px;height:46px;width:46px}
+}
+@media(prefers-reduced-motion:reduce){
+  .luxury-multi .mini-card.mp-card-deal,
+  .luxury-multi .mini-card.mp-card-flip{animation:none}
+}
+
+
+/* Stop the betting/coin controls from overlapping or covering phone cards.
+   All sections participate in normal document flow with intrinsic height. */
+@media(max-width:700px){
+  body.luxury-multi{height:auto;min-height:100svh;overflow-y:auto}
+  .luxury-multi .layout{
+    display:block;height:auto!important;min-height:calc(100svh - 62px);
+    overflow:visible;
+  }
+  .luxury-multi #gameView{
+    flex:0 0 auto;min-height:0;height:auto!important;overflow:visible;
+  }
+  .luxury-multi .game-layout{
+    display:block;flex:none;width:100%;min-height:0;height:auto!important;
+    overflow:visible;
+  }
+  .luxury-multi .table-area{
+    display:grid;grid-template-columns:minmax(0,1fr);
+    grid-template-rows:max-content max-content;
+    align-content:start;justify-content:stretch;justify-items:center;
+    align-items:start;gap:20px;
+    min-height:0;height:auto!important;overflow:visible;
+  }
+  .luxury-multi .mp-table{
+    position:relative;grid-row:1;
+    align-self:start;min-height:max-content;height:auto!important;
+    margin:0;overflow:visible;
+  }
+  .luxury-multi .mp-players-row{
+    min-height:max-content;height:auto;
+    align-items:stretch;overflow:visible;
+  }
+  .luxury-multi .mp-controls{
+    position:relative;grid-row:2;align-self:start;
+    height:auto!important;max-height:none;
+    margin:0;z-index:1;
+  }
+  .luxury-multi .mp-bet-row{
+    position:relative;z-index:1;
+  }
+  .luxury-multi .chat-panel{
+    position:relative;width:calc(100% - 20px);margin:8px auto 25px;
+  }
+}

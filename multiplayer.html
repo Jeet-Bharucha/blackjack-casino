@@ -175,6 +175,7 @@
   }
 </style>
 <link rel="stylesheet" href="luxury-theme.css"/>
+<link rel="stylesheet" href="multiplayer-polish.css"/>
 </head>
 <body class="luxury-multi">
 
@@ -297,6 +298,7 @@ let mySeatIndex = -1;
 let currentTableId = null;
 let myTurn = false;
 let tablePhase = 'waiting';
+let lastRenderedTable = null;
 let currentPrivateInvite = null;
 const inviteFromUrl = new URLSearchParams(location.search).get('invite');
 
@@ -410,7 +412,7 @@ function showGame() {
 
 function leaveTable() {
   socket.emit('leave_table');
-  currentTableId = null; currentPrivateInvite = null; mySeatIndex = -1; myBet = 0; myTurn = false;
+  currentTableId = null; currentPrivateInvite = null; mySeatIndex = -1; myBet = 0; myTurn = false; lastRenderedTable = null;
   history.replaceState(null,'',location.pathname);
   document.getElementById('lobbyView').style.display = '';
   document.getElementById('gameView').style.display = 'none';
@@ -434,43 +436,84 @@ function renderTable(state) {
   document.getElementById('mpStatus').textContent = phaseLabel(state.phase);
   document.getElementById('mpTimer').style.display = ['betting'].includes(state.phase) ? '' : 'none';
 
-  // Dealer hand
+  // Keep existing DOM cards while round state updates arrive. Recreating them
+  // every socket event caused cards to jump/flicker and replay their entrance.
+  const firstPaint = lastRenderedTable !== state.id;
+  lastRenderedTable = state.id;
+
   const dHand = document.getElementById('mpDealerHand');
-  const existingScore = dHand.querySelector('.mp-score');
-  dHand.innerHTML = '';
-  if (existingScore) dHand.appendChild(existingScore); else { const s=document.createElement('span'); s.className='mp-score'; s.id='mpDealerScore'; s.style.display='none'; dHand.appendChild(s); }
+  let dScore = document.getElementById('mpDealerScore');
+  if (!dScore) {
+    dScore = document.createElement('span');
+    dScore.className = 'mp-score';
+    dScore.id = 'mpDealerScore';
+    dScore.style.display = 'none';
+    dHand.appendChild(dScore);
+  }
+  syncMiniCards(dHand, state.dealerCards, !firstPaint);
+  const visible = state.dealerCards.filter(c => c.rank !== '?');
+  dScore.style.display = visible.length ? '' : 'none';
+  if (visible.length) dScore.textContent = handTotal(visible);
 
-  state.dealerCards.forEach(c => dHand.insertBefore(buildMiniCard(c), dHand.querySelector('.mp-score')));
-  const dScore = document.getElementById('mpDealerScore');
-  if (state.dealerCards.length) {
-    const visible = state.dealerCards.filter(c=>c.rank!=='?');
-    if (visible.length) { dScore.style.display=''; dScore.textContent = handTotal(visible); }
-  } else { dScore.style.display='none'; }
-
-  // Players
+  // A stable element per seat is essential for natural dealing animations.
+  // Mobile CSS presents the current player's seat full-width above the other
+  // seats instead of forcing five hands into a clipped oval.
   const row = document.getElementById('mpPlayersRow');
-  row.innerHTML = '';
   state.seats.forEach((seat, i) => {
-    const div = document.createElement('div');
-    div.className = 'mp-seat' + (!seat?' empty':'') + (i===mySeatIndex?' my-seat':'') + (i===state.currentSeat?' active-seat':'') + (seat && seat.connected === false?' seat-offline':'');
-    if (!seat) {
-      div.innerHTML = `<div class="seat-name" style="color:rgba(255,255,255,.2)">Empty</div><div class="seat-cards"></div>`;
-    } else {
-      const hand = seat.hands?.[seat.hands.length-1] || { cards:[] };
-      const cards = (seat.hands||[]).flatMap(h=>h.cards);
-      const isDone = seat.done;
-      div.innerHTML = `
-        <div class="seat-name">${esc(seat.username)}${i===mySeatIndex?' (You)':''}</div>
-        <div class="seat-bet">${seat.hasBet?seat.bet+' chips':''}</div>
-        <div class="seat-cards" id="seatCards${i}"></div>
-        ${seat.connected === false?'<div class="seat-status done">Reconnecting…</div>':isDone?'<div class="seat-status done">Done</div>':i===state.currentSeat?'<div class="seat-status playing">Playing</div>':''}
-      `;
+    let div = row.querySelector('[data-seat="' + i + '"]');
+    if (!div) {
+      div = document.createElement('div');
+      div.dataset.seat = String(i);
       row.appendChild(div);
-      const cardsEl = div.querySelector(`#seatCards${i}`);
-      cards.forEach(c => cardsEl.appendChild(buildMiniCard(c)));
+    }
+    const identity = seat ? seat.username : '(empty)';
+    if (div.dataset.identity !== identity) {
+      div.dataset.identity = identity;
+      div.replaceChildren();
+      const label = document.createElement('div');
+      label.className = 'seat-name';
+      const bet = document.createElement('div');
+      bet.className = 'seat-bet';
+      const cardsEl = document.createElement('div');
+      cardsEl.className = 'seat-cards';
+      cardsEl.id = 'seatCards' + i;
+      const status = document.createElement('div');
+      status.className = 'seat-status';
+      div.append(label, bet, cardsEl, status);
+    }
+    div.className = 'mp-seat' + (!seat ? ' empty' : '') +
+      (i === mySeatIndex ? ' my-seat' : '') +
+      (i === state.currentSeat ? ' active-seat' : '') +
+      (seat && seat.connected === false ? ' seat-offline' : '');
+    const label = div.querySelector('.seat-name');
+    const bet = div.querySelector('.seat-bet');
+    const cardsEl = div.querySelector('.seat-cards');
+    const status = div.querySelector('.seat-status');
+    if (!seat) {
+      label.textContent = 'Empty';
+      bet.textContent = '';
+      status.textContent = '';
+      syncMiniCards(cardsEl, [], false);
       return;
     }
-    row.appendChild(div);
+    label.textContent = seat.username + (i === mySeatIndex ? ' (You)' : '');
+    bet.textContent = seat.hasBet ? Number(seat.bet).toLocaleString() + ' chips' : '';
+    cardsEl.setAttribute('aria-label',i === mySeatIndex ? 'Your Blackjack cards' : seat.username + ' cards');
+    const cards = (seat.hands || []).flatMap(hand => hand.cards || []);
+    syncMiniCards(cardsEl, cards, !firstPaint);
+    if (seat.connected === false) {
+      status.className = 'seat-status done';
+      status.textContent = 'Reconnecting…';
+    } else if (seat.done) {
+      status.className = 'seat-status done';
+      status.textContent = 'Done';
+    } else if (i === state.currentSeat) {
+      status.className = 'seat-status playing';
+      status.textContent = 'Playing';
+    } else {
+      status.className = 'seat-status';
+      status.textContent = '';
+    }
   });
 
   // Update my balance from seat
@@ -495,12 +538,52 @@ function phaseLabel(phase) {
   return { waiting:'Waiting for players...', betting:'Place your bets!', dealing:'Dealing cards...', playing:'Game in progress', dealer_turn:"Dealer's turn", results:'Round over' }[phase] || phase;
 }
 
+function paintMiniCard(el, card) {
+  const hidden = card.rank === '?';
+  el.className = 'mini-card ' + (hidden ? 'face-down' : RED_SUITS.has(card.suit) ? 'red' : 'black');
+  el.dataset.cardKey = String(card.rank) + '|' + String(card.suit);
+  el.replaceChildren();
+  if (!hidden) {
+    const rank = document.createElement('span');
+    rank.className = 'mini-rank';
+    rank.textContent = card.rank;
+    const suit = document.createElement('span');
+    suit.className = 'mini-suit';
+    suit.textContent = card.suit;
+    el.append(rank, suit);
+  }
+  el.setAttribute('role', 'img');
+  const suits = {'♠':'spades','♥':'hearts','♦':'diamonds','♣':'clubs'};
+  el.setAttribute('aria-label',hidden ? 'Face-down card' : card.rank + ' of ' + (suits[card.suit] || 'unknown suit'));
+}
 function buildMiniCard(card) {
   const el = document.createElement('div');
-  if (card.rank === '?') { el.className='mini-card face-down'; return el; }
-  el.className = 'mini-card ' + (RED_SUITS.has(card.suit)?'red':'black');
-  el.innerHTML = `<div class="mini-rank">${card.rank}</div><div class="mini-suit">${card.suit}</div>`;
+  paintMiniCard(el, card);
   return el;
+}
+function syncMiniCards(container, cards, animate) {
+  // The dealer score is a separate child and is deliberately preserved.
+  const existing = Array.from(container.children).filter(el => el.classList.contains('mini-card'));
+  for (let i = existing.length - 1; i >= cards.length; i--) existing[i].remove();
+  cards.forEach((card, index) => {
+    const old = existing[index];
+    if (!old) {
+      const el = buildMiniCard(card);
+      if (animate) {
+        el.style.setProperty('--card-enter-delay', Math.min(index, 4) * 65 + 'ms');
+        el.classList.add('mp-card-deal');
+      }
+      const score = container.querySelector('.mp-score');
+      if (score) container.insertBefore(el, score);
+      else container.appendChild(el);
+    } else {
+      const key = String(card.rank) + '|' + String(card.suit);
+      if (old.dataset.cardKey === key) return;
+      const revealed = old.dataset.cardKey?.startsWith('?|') && card.rank !== '?';
+      paintMiniCard(old, card);
+      if (revealed && animate) old.classList.add('mp-card-flip');
+    }
+  });
 }
 
 function handTotal(cards) {
