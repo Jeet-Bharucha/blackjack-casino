@@ -690,6 +690,8 @@ function addChat(text, type='msg') {
     else { el.className='chat-msg'; el.textContent=text; }
   } else { el.className=`chat-msg ${type}`; el.textContent=text; }
   box.appendChild(el);
+  // Long-running multiplayer sessions should not accumulate thousands of DOM nodes.
+  while (box.childElementCount > 100) box.firstElementChild.remove();
   box.scrollTop=box.scrollHeight;
 }
 

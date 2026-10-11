@@ -8,6 +8,7 @@ const jwt        = require('jsonwebtoken');
 const path       = require('path');
 const crypto     = require('crypto');
 const soloGame   = require('./solo-engine');
+const { validateAvatar } = require('./avatar-utils');
 const { version: sessionVersion, sessionMatches } = require('./session-utils');
 require('dotenv').config();
 
@@ -27,6 +28,7 @@ async function sendEmail({ to, subject, html }) {
       method: 'POST',
       headers: { Authorization: `Bearer ${resendApiKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ from: process.env.EMAIL_FROM || 'Blackjack Casino <onboarding@resend.dev>', to, subject, html }),
+      signal: AbortSignal.timeout(10000),
     });
     if (!response.ok) { console.warn('Resend response:', response.status); return false; }
     return true;
@@ -61,6 +63,7 @@ app.use(cors({ origin(origin, cb) {
   return cb(null, !origin || allowedOrigins.includes(origin));
 } }));
 const requestCounters = new Map();
+let lastCounterPrune = 0;
 function throttle(maxAttempts, windowMs) {
   return (req, res, next) => {
     const key = req.path + ':' + req.ip, now = Date.now();
@@ -74,14 +77,18 @@ function throttle(maxAttempts, windowMs) {
       }
       bucket.count++;
     }
-    if (requestCounters.size > 5000) {
-      for (const [k, v] of requestCounters) if (v.expires < now) requestCounters.delete(k);
+    // Keep the per-IP fallback throttle bounded; random IPs/paths must not
+    // grow the map forever or trigger a full sweep on every request.
+    if (requestCounters.size >= 5000 && now-lastCounterPrune>60000) {
+      lastCounterPrune=now;
+      for (const [k, v] of requestCounters) if (v.expires <= now) requestCounters.delete(k);
     }
+    while (requestCounters.size > 10000) requestCounters.delete(requestCounters.keys().next().value);
     next();
   };
 }
 
-app.use(express.json({ limit: '5mb' })); // allow base64 avatar uploads
+app.use(express.json({ limit: '256kb' })); // 150 KB avatars fit; reject oversized JSON early
 // Never serve backend source, logs, dependencies or security/configuration files
 // from the Render origin. Static gameplay assets at the web root remain available.
 app.use((req,res,next)=>{
@@ -612,6 +619,12 @@ app.post('/api/login', throttle(15, 15 * 60 * 1000), async (req, res) => {
 // ── FORGOT / RESET PASSWORD ───────────────────────────
 // Codes are delivered by email only, never displayed by the API.
 const resetCodes = new Map();
+const MAX_RESET_CODES = 1000;
+function pruneResetCodes(now=Date.now()) {
+  for (const [key, entry] of resetCodes) {
+    if(entry.expires<=now)resetCodes.delete(key);
+  }
+}
 app.post('/api/forgot-password', throttle(5, 15 * 60 * 1000), async (req, res) => {
   const generic = { success: true, message: 'If the account exists, a reset code will be emailed.' };
   try {
@@ -620,6 +633,13 @@ app.post('/api/forgot-password', throttle(5, 15 * 60 * 1000), async (req, res) =
     if (!resendApiKey) return res.status(503).json({ error: 'Password reset email is not configured. Contact the site owner.' });
     const [rows] = await db.execute('SELECT id FROM users WHERE email=?', [email]);
     if (rows.length) {
+      const now=Date.now();
+      pruneResetCodes(now);
+      const existing=resetCodes.get(email);
+      // Keep the previous valid code and return the same generic response.
+      // Rate-limit by account as well as by IP to discourage email flooding.
+      if(existing && now-(existing.sentAt||0)<60000) return res.json(generic);
+      if(resetCodes.size>=MAX_RESET_CODES && !existing) return res.json(generic);
       const code = String(crypto.randomInt(100000, 1000000));
       const delivered = await sendEmail({
         to: email, subject: 'Your Blackjack Casino password reset code',
@@ -627,7 +647,7 @@ app.post('/api/forgot-password', throttle(5, 15 * 60 * 1000), async (req, res) =
       });
       if (delivered) resetCodes.set(email, {
         hash: crypto.createHash('sha256').update(code).digest('hex'),
-        expires: Date.now() + 15 * 60 * 1000, userId: rows[0].id, attempts: 0,
+        expires: Date.now() + 15 * 60 * 1000, userId: rows[0].id, attempts: 0, sentAt: now,
       });
     }
     return res.json(generic);
@@ -640,19 +660,27 @@ app.post('/api/reset-password', throttle(10, 15 * 60 * 1000), async (req, res) =
       return res.status(400).json({ error: 'Email, code and new password required' });
     if (newPassword.length < 10 || newPassword.length > 128)
       return res.status(400).json({ error: 'Password must be 10–128 characters' });
+    if(!/^\d{6}$/.test(code.trim()) || !email.trim() || email.length>254)
+      return res.status(400).json({ error: 'Invalid or expired reset code' });
     const key = email.trim().toLowerCase(), entry = resetCodes.get(key);
     if (!entry || entry.expires < Date.now() || entry.attempts >= 5) {
       resetCodes.delete(key);
       return res.status(400).json({ error: 'Invalid or expired reset code' });
     }
+    if(entry.processing) return res.status(400).json({ error: 'Reset already in progress' });
     entry.attempts++;
     const actual = crypto.createHash('sha256').update(code.trim()).digest();
     if (!crypto.timingSafeEqual(actual, Buffer.from(entry.hash, 'hex')))
       return res.status(400).json({ error: 'Invalid or expired reset code' });
-    resetCodes.delete(key);
-    const hash = await bcrypt.hash(newPassword, 10);
-    await db.execute('UPDATE users SET password=?,token_version=token_version+1 WHERE id=?', [hash, entry.userId]);
-    return res.json({ success: true });
+    entry.processing=true;
+    try {
+      const hash = await bcrypt.hash(newPassword, 10);
+      await db.execute('UPDATE users SET password=?,token_version=token_version+1 WHERE id=?', [hash, entry.userId]);
+      resetCodes.delete(key);
+      return res.json({ success: true });
+    } finally {
+      entry.processing=false;
+    }
   } catch (e) { console.error('Password reset failed:', e.message); return res.status(500).json({ error: 'Unable to reset password' }); }
 });
 
@@ -672,15 +700,16 @@ app.put('/api/profile', auth, async (req, res) => {
     const updates = [], values = [];
 
     if (displayName !== undefined) {
-      if (displayName && (displayName.length < 2 || displayName.length > 30))
+      if (displayName !== null && (typeof displayName !== 'string' ||
+           (displayName && (displayName.length < 2 || displayName.length > 30))))
         return res.status(400).json({ error: 'Display name must be 2–30 characters' });
       updates.push('display_name = ?'); values.push(displayName || null);
     }
     if (avatar !== undefined) {
-      // Basic validation: must be a data URL or null
-      if (avatar && !avatar.startsWith('data:image/'))
-        return res.status(400).json({ error: 'Invalid image format' });
-      updates.push('avatar = ?'); values.push(avatar || null);
+      let safeAvatar;
+      try { safeAvatar = validateAvatar(avatar); }
+      catch (error) { return res.status(400).json({ error: error.message }); }
+      updates.push('avatar = ?'); values.push(safeAvatar);
     }
 
     if (!updates.length) return res.status(400).json({ error: 'Nothing to update' });
@@ -1091,7 +1120,8 @@ app.get('/api/leaderboard/season',async(req,res)=>{
 const tables = new Map(), socketToTable = new Map(), socketToUser = new Map();
 const SUITS=['♠','♥','♦','♣'], RANKS=['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
 
-function buildShoe(n=6){ const s=[]; for(let d=0;d<n;d++) for(const su of SUITS) for(const r of RANKS) s.push({rank:r,suit:su}); for(let i=s.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[s[i],s[j]]=[s[j],s[i]];} return s; }
+// Cryptographic shuffle matches solo-game fairness without changing card odds.
+function buildShoe(n=6){ const s=[]; for(let d=0;d<n;d++) for(const su of SUITS) for(const r of RANKS) s.push({rank:r,suit:su}); for(let i=s.length-1;i>0;i--){const j=crypto.randomInt(i+1);[s[i],s[j]]=[s[j],s[i]];} return s; }
 function cardValue(r){ if(['J','Q','K'].includes(r)) return 10; if(r==='A') return 11; return parseInt(r); }
 function handTotal(cards){ let t=0,a=0; for(const c of cards){t+=cardValue(c.rank);if(c.rank==='A')a++;} while(t>21&&a>0){t-=10;a--;} return t; }
 function drawCard(shoe){ if(shoe.length<52){const f=buildShoe();shoe.push(...f);} return shoe.pop(); }
@@ -1099,7 +1129,9 @@ function createTable(name,isPrivate=false){ return {id:crypto.randomBytes(8).toS
   isPrivate,inviteCode:isPrivate?crypto.randomBytes(12).toString('hex'):null,
   seats:[null,null,null,null,null],phase:'waiting',shoe:buildShoe(),dealerCards:[],currentSeat:-1,betTimer:null,turnTimer:null,chat:[]}; }
 
-function tablePublicState(t){ return {id:t.id,name:t.name,phase:t.phase,isPrivate:t.isPrivate,inviteCode:t.inviteCode,currentSeat:t.currentSeat,dealerCards:t.phase==='playing'?[t.dealerCards[0],{rank:'?',suit:'?'}]:t.dealerCards,seats:t.seats.map(s=>s?{username:s.username,displayName:s.displayName||s.username,avatar:s.avatar,vipTier:s.vipTier||'Bronze',bet:s.bet,hasBet:s.hasBet,ready:s.ready,done:s.done,hands:s.hands,balance:s.balance,connected:!!s.socketId}:null),chat:t.chat.slice(-50),shoeSize:t.shoe.length}; }
+// Never re-transmit base64 avatars or chat history on every bet, hit and timer
+// update: clients render usernames/cards and receive chat as separate events.
+function tablePublicState(t){ return {id:t.id,name:t.name,phase:t.phase,isPrivate:t.isPrivate,inviteCode:t.inviteCode,currentSeat:t.currentSeat,dealerCards:t.phase==='playing'?[t.dealerCards[0],{rank:'?',suit:'?'}]:t.dealerCards,seats:t.seats.map(s=>s?{username:s.username,bet:s.bet,hasBet:s.hasBet,ready:s.ready,done:s.done,hands:s.hands,balance:s.balance,connected:!!s.socketId}:null),shoeSize:t.shoe.length}; }
 function getTableList(){ return Array.from(tables.values()).filter(t=>!t.isPrivate).map(t=>({id:t.id,name:t.name,phase:t.phase,playerCount:t.seats.filter(Boolean).length})); }
 function broadcastTableList(){ io.emit('table_list',getTableList()); }
 function broadcastTable(t){ io.to(t.id).emit('table_update',tablePublicState(t)); }
@@ -1186,22 +1218,21 @@ async function joinSocketTable(socket,tableId,token,inviteCode){
   if(freeSeat===-1)return socket.emit('error_msg','Table is full');
   if(returning===-1 && table.seats.some(seat=>seat&&seat.userId===u.id))
     return socket.emit('error_msg','Already seated at this table');
-  let name=u.username,avatar=null;
+  let name=u.username;
   try{
-    const [rows]=await db.execute('SELECT username,display_name,avatar,is_banned,token_version,self_excluded_until FROM users WHERE id=?',[u.id]);
+    const [rows]=await db.execute('SELECT username,display_name,is_banned,token_version,self_excluded_until FROM users WHERE id=?',[u.id]);
     if(!rows.length||!sessionMatches(rows[0],u))return socket.emit('error_msg','Session expired or account unavailable');
     if(rows[0].self_excluded_until && new Date(rows[0].self_excluded_until).getTime()>Date.now())
       return socket.emit('error_msg','Self-exclusion is active');
     name=rows[0].display_name||u.username;
-    avatar=rows[0].avatar;
   }catch(e){return socket.emit('error_msg','Unable to load account');}
   if(returning!==-1){
     const seat=table.seats[returning];
     if(seat.reconnectTimer){clearTimeout(seat.reconnectTimer);seat.reconnectTimer=null;}
     seat.socketId=socket.id;
-    seat.displayName=name; seat.avatar=avatar;
+    seat.displayName=name;
   } else {
-    table.seats[freeSeat]={socketId:socket.id,userId:u.id,username:u.username,displayName:name,avatar,
+    table.seats[freeSeat]={socketId:socket.id,userId:u.id,username:u.username,displayName:name,
       vipTier:'Bronze',balance:1000,bet:0,hasBet:false,ready:false,hands:[],activeHand:0,done:false};
   }
   socketToTable.set(socket.id,table.id);socketToUser.set(socket.id,u);
