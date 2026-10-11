@@ -660,7 +660,7 @@ app.post('/api/reset-password', throttle(10, 15 * 60 * 1000), async (req, res) =
       return res.status(400).json({ error: 'Email, code and new password required' });
     if (newPassword.length < 10 || newPassword.length > 128)
       return res.status(400).json({ error: 'Password must be 10–128 characters' });
-    if(!/^\\d{6}$/.test(code.trim()) || !email.trim() || email.length>254)
+    if(!/^\d{6}$/.test(code.trim()) || !email.trim() || email.length>254)
       return res.status(400).json({ error: 'Invalid or expired reset code' });
     const key = email.trim().toLowerCase(), entry = resetCodes.get(key);
     if (!entry || entry.expires < Date.now() || entry.attempts >= 5) {
