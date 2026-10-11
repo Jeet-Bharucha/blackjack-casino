@@ -88,7 +88,7 @@ function throttle(maxAttempts, windowMs) {
   };
 }
 
-app.use(express.json({ limit: '5mb' })); // allow base64 avatar uploads
+app.use(express.json({ limit: '256kb' })); // 150 KB avatars fit; reject oversized JSON early
 // Never serve backend source, logs, dependencies or security/configuration files
 // from the Render origin. Static gameplay assets at the web root remain available.
 app.use((req,res,next)=>{
