@@ -4,7 +4,7 @@
 <meta charset="UTF-8"/>
 <link rel="icon" type="image/svg+xml" href="favicon.svg"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Blackjack — Profile</title>
+<title>Player Profile | Blackjack Casino Royale</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=Cinzel:wght@400;600;700&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap');
   *{margin:0;padding:0;box-sizing:border-box;}
@@ -194,11 +194,11 @@ const ALL_ACHIEVEMENTS = [
   { key:'win_streak_3',   name:'Hot Streak',     desc:'Win 3 hands in a row',      icon:'🔥' },
   { key:'win_streak_5',   name:'On Fire',        desc:'Win 5 hands in a row',      icon:'💥' },
   { key:'win_streak_10',  name:'Unstoppable',    desc:'Win 10 hands in a row',     icon:'👑' },
-  { key:'high_roller',    name:'High Roller',    desc:'Win with a $100+ bet',      icon:'💰' },
+  { key:'high_roller',    name:'High Roller',    desc:'Win with a 100+ chip bet',      icon:'💰' },
   { key:'comeback',       name:'Comeback Kid',   desc:'Win when nearly broke',     icon:'💪' },
   { key:'veteran_100',    name:'Veteran',        desc:'Play 100 hands',            icon:'🎖️' },
   { key:'veteran_500',    name:'Elite',          desc:'Play 500 hands',            icon:'🏆' },
-  { key:'rich',           name:'Millionaire',    desc:'Reach $10,000 balance',     icon:'💎' },
+  { key:'rich',           name:'Millionaire',    desc:'Reach 10,000 virtual chips',     icon:'💎' },
   { key:'double_win',     name:'Doubling Down',  desc:'Win a doubled hand',        icon:'✌️' },
   { key:'split_win',      name:'Split Decision', desc:'Win after splitting',       icon:'⚡' },
 ];
@@ -296,7 +296,7 @@ function render(data) {
 
   document.getElementById('page').innerHTML = `
     <div class="profile-hero">
-      <div class="avatar-wrap" ${isOwnProfile ? 'onclick="triggerAvatarUpload()"' : ''} title="${isOwnProfile?'Click to change photo':''}">
+      <div class="avatar-wrap" ${isOwnProfile ? 'role="button" tabindex="0" aria-label="Change avatar photo" onclick="triggerAvatarUpload()"' : ''} title="${isOwnProfile?'Click to change photo':''}">
         <div class="avatar" id="heroAvatar" style="${borderStyle}">${avatarHTML}</div>
         ${isOwnProfile ? '<div class="avatar-edit">✏️</div><input type="file" id="avatarInput" accept="image/*"/>' : ''}
       </div>
@@ -307,8 +307,8 @@ function render(data) {
         <span class="vip-badge vip-${tp.tier.name}">${tp.tier.name}</span>
       </div>
       <div style="text-align:right">
-        <div class="hero-balance-label">Balance</div>
-        <div class="hero-balance">$${(data.balance||0).toLocaleString()}</div>
+        <div class="hero-balance-label">Virtual Chip Balance</div>
+        <div class="hero-balance">${(data.balance||0).toLocaleString()} <small style="font-size:13px;letter-spacing:1px;">chips</small></div>
       </div>
     </div>
 
@@ -390,6 +390,12 @@ function render(data) {
   if (isOwnProfile) {
     const inp = document.getElementById('avatarInput');
     if (inp) inp.addEventListener('change', handleAvatarChange);
+    const avatar=document.querySelector('.avatar-wrap[role="button"]');
+    if (avatar) avatar.addEventListener('keydown',event=>{
+      if(event.key==='Enter'||event.key===' '){
+        event.preventDefault();triggerAvatarUpload();
+      }
+    });
   }
 }
 
