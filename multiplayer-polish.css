@@ -159,9 +159,15 @@
   .luxury-multi .mp-btn-row .mp-btn{min-width:0;width:100%;min-height:49px}
   .luxury-multi .mp-btn-row .mp-btn.leave{grid-column:1/-1}
   .luxury-multi .chat-panel{max-height:185px;min-height:150px;margin:12px 0 25px}
+  /* Results are placed after the visible cards, not as a covering overlay. */
   .luxury-multi .result-banner{
-    width:min(94%,390px);max-height:80%;overflow-y:auto;
+    position:relative;top:auto;left:auto;order:4;
+    transform:none;display:none;opacity:0;pointer-events:none;
+    width:100%;max-width:100%;max-height:none;overflow:visible;
     padding:15px 14px;border-radius:17px;
+  }
+  .luxury-multi .result-banner.show{
+    display:block;opacity:1;transform:none;
   }
   .luxury-multi .result-banner-title{font-size:18px}
 }
