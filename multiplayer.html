@@ -450,10 +450,35 @@ function renderTable(state) {
     dScore.style.display = 'none';
     dHand.appendChild(dScore);
   }
-  syncMiniCards(dHand, state.dealerCards, !firstPaint);
+  // Initial cards are received in a single authoritative socket state, but
+  // each card enters in turn: seat 1 -> seat 2 -> dealer -> second cards.
+  // Rejoining an existing game does not replay its initial dealing sequence.
+  const participants = state.seats.flatMap((seat, i) =>
+    seat?.hands?.some(hand => hand.cards?.length) ? [i] : []);
+  const isInitialDeal = !firstPaint && state.phase === 'playing' &&
+    state.dealerCards.length === 2 &&
+    !dHand.querySelector('.mini-card') && participants.length > 0 &&
+    participants.every(i => state.seats[i].hands.length === 1 &&
+      state.seats[i].hands[0].cards.length === 2);
+  const delayFor = (position, cardIndex) =>
+    dealRevealDelay(position,cardIndex,participants.length);
+  syncMiniCards(dHand, state.dealerCards, !firstPaint,
+    isInitialDeal ? index => delayFor(participants.length, index) : null);
   const visible = state.dealerCards.filter(c => c.rank !== '?');
   dScore.style.display = visible.length ? '' : 'none';
-  if (visible.length) dScore.textContent = handTotal(visible);
+  if (visible.length) {
+    const hasHole = state.dealerCards.some(c => c.rank === '?');
+    dScore.textContent = 'Dealer ' + handTotal(visible) + (hasHole ? ' + ?' : '');
+    if (isInitialDeal) {
+      dScore.classList.add('mp-total-deal');
+      dScore.style.setProperty('--total-enter-delay',
+        (delayFor(participants.length, 0) + 320) + 'ms');
+    } else if (!hasHole) {
+      dScore.classList.remove('mp-total-deal');
+    }
+  } else {
+    dScore.classList.remove('mp-total-deal');
+  }
 
   // A stable element per seat is essential for natural dealing animations.
   // Mobile CSS presents the current player's seat full-width above the other
@@ -477,9 +502,12 @@ function renderTable(state) {
       const cardsEl = document.createElement('div');
       cardsEl.className = 'seat-cards';
       cardsEl.id = 'seatCards' + i;
+      const total = document.createElement('div');
+      total.className = 'seat-total';
+      if (i === mySeatIndex) total.setAttribute('aria-live','polite');
       const status = document.createElement('div');
       status.className = 'seat-status';
-      div.append(label, bet, cardsEl, status);
+      div.append(label, bet, cardsEl, total, status);
     }
     div.className = 'mp-seat' + (!seat ? ' empty' : '') +
       (i === mySeatIndex ? ' my-seat' : '') +
@@ -488,10 +516,13 @@ function renderTable(state) {
     const label = div.querySelector('.seat-name');
     const bet = div.querySelector('.seat-bet');
     const cardsEl = div.querySelector('.seat-cards');
+    const total = div.querySelector('.seat-total');
     const status = div.querySelector('.seat-status');
     if (!seat) {
       label.textContent = 'Empty';
       bet.textContent = '';
+      total.textContent = '';
+      total.classList.remove('mp-total-deal','mp-total-change');
       status.textContent = '';
       syncMiniCards(cardsEl, [], false);
       return;
@@ -500,7 +531,25 @@ function renderTable(state) {
     bet.textContent = seat.hasBet ? Number(seat.bet).toLocaleString() + ' chips' : '';
     cardsEl.setAttribute('aria-label',i === mySeatIndex ? 'Your Blackjack cards' : seat.username + ' cards');
     const cards = (seat.hands || []).flatMap(hand => hand.cards || []);
-    syncMiniCards(cardsEl, cards, !firstPaint);
+    const participantPosition = participants.indexOf(i);
+    syncMiniCards(cardsEl, cards, !firstPaint,
+      isInitialDeal && participantPosition !== -1
+        ? index => delayFor(participantPosition,index) : null);
+    // Display server-provided visible-card totals, including Ace as 1 or 11.
+    // Never combine separate split hands into a misleading single sum.
+    const nextTotal = formatSeatTotals(seat.hands || []);
+    if (total.textContent !== nextTotal) {
+      const hadTotal = !!total.textContent;
+      total.textContent = nextTotal;
+      total.classList.remove('mp-total-deal','mp-total-change');
+      if (isInitialDeal && nextTotal && participantPosition !== -1) {
+        total.classList.add('mp-total-deal');
+        total.style.setProperty('--total-enter-delay',
+          (delayFor(participantPosition, 1) + 320) + 'ms');
+      } else if (hadTotal && nextTotal && !firstPaint) {
+        total.classList.add('mp-total-change');
+      }
+    }
     if (seat.connected === false) {
       status.className = 'seat-status done';
       status.textContent = 'Reconnecting…';
@@ -537,6 +586,24 @@ function renderTable(state) {
 function phaseLabel(phase) {
   return { waiting:'Waiting for players...', betting:'Place your bets!', dealing:'Dealing cards...', playing:'Game in progress', dealer_turn:"Dealer's turn", results:'Round over' }[phase] || phase;
 }
+// Serialized slots: every occupied seat gets its first card, then the dealer,
+ // then each seat gets its second card, then the dealer's face-down card.
+ // Existing rounds/reconnects bypass this entrance delay.
+function dealRevealDelay(position, cardIndex, participatingSeats) {
+  return (cardIndex * (participatingSeats + 1) + position) * 330;
+}
+function formatSeatTotals(hands) {
+  const activeHands = (hands || []).filter(hand => Array.isArray(hand.cards) && hand.cards.length);
+  if (!activeHands.length) return '';
+  const totals = activeHands.map(hand => handTotal(hand.cards));
+  if (activeHands.length > 1)
+    return totals.map((total,index) => 'Hand ' + (index + 1) + ': ' + total).join(' · ');
+  const total = totals[0];
+  if (total > 21) return 'Bust · ' + total;
+  if (activeHands[0].cards.length === 2 && total === 21)
+    return 'Blackjack · 21';
+  return 'Total ' + total;
+}
 
 function paintMiniCard(el, card) {
   const hidden = card.rank === '?';
@@ -561,7 +628,7 @@ function buildMiniCard(card) {
   paintMiniCard(el, card);
   return el;
 }
-function syncMiniCards(container, cards, animate) {
+function syncMiniCards(container, cards, animate, initialDealDelay = null) {
   // The dealer score is a separate child and is deliberately preserved.
   const existing = Array.from(container.children).filter(el => el.classList.contains('mini-card'));
   for (let i = existing.length - 1; i >= cards.length; i--) existing[i].remove();
@@ -570,7 +637,9 @@ function syncMiniCards(container, cards, animate) {
     if (!old) {
       const el = buildMiniCard(card);
       if (animate) {
-        el.style.setProperty('--card-enter-delay', Math.min(index, 4) * 65 + 'ms');
+        const delay = initialDealDelay
+          ? initialDealDelay(index) : 0; // Hit or dealer draw enters immediately.
+        el.style.setProperty('--card-enter-delay', delay + 'ms');
         el.classList.add('mp-card-deal');
       }
       const score = container.querySelector('.mp-score');
