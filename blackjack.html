@@ -336,7 +336,7 @@
 </div>
 
 <main class="scene">
-  <div class="table-caption"><span class="hud-pill">TABLE 01</span><strong>ROYAL BLACKJACK</strong><span class="hud-pill">100% FREE PLAY</span></div>
+  <div class="table-caption"><span class="hud-pill">TABLE 01</span><strong>ROYAL BLACKJACK</strong><span class="hud-pill">100% FREE PLAY</span><button type="button" id="missionSummary" class="hud-pill mission-badge" aria-label="Show today’s missions" onclick="toggleChallengePanel()">🎯 Daily Missions</button></div>
   <div class="table" id="tableEl" aria-label="Solo Blackjack table">
     <div class="table-text">Blackjack Pays 3 to 2 · Dealer Must Stand on 17</div>
     <div class="shoe-bar"><div class="shoe-fill" id="shoeBar" style="height:100%"></div></div>
@@ -416,7 +416,7 @@
 <div class="modal-overlay hidden" id="insuranceModal">
   <div class="modal-box">
     <div class="modal-title">Insurance?</div>
-    <div class="modal-sub" id="insuranceSub">Dealer shows Ace — Insurance costs $0</div>
+    <div class="modal-sub" id="insuranceSub">Dealer shows an Ace — insurance is a virtual-chip bet</div>
     <div class="modal-btns">
       <button class="btn-yes" onclick="takeInsurance(true)">Take Insurance</button>
       <button class="btn-no"  onclick="takeInsurance(false)">No Thanks</button>
@@ -430,7 +430,7 @@
     <div class="bonus-icon">🎁</div>
     <div class="bonus-title">Daily Bonus!</div>
     <div class="bonus-streak" id="bonusStreak">Day 1 Streak</div>
-    <div class="bonus-amount" id="bonusAmount">+$100</div>
+    <div class="bonus-amount" id="bonusAmount">+100 chips</div>
     <button class="btn-next" onclick="closeBonusModal()">Claim & Play</button>
   </div>
 </div>
