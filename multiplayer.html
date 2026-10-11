@@ -460,10 +460,8 @@ function renderTable(state) {
     !dHand.querySelector('.mini-card') && participants.length > 0 &&
     participants.every(i => state.seats[i].hands.length === 1 &&
       state.seats[i].hands[0].cards.length === 2);
-  const dealInterval = 330; // one visible card starts after the previous one
-  const dealSlots = participants.length + 1; // include the dealer
   const delayFor = (position, cardIndex) =>
-    (cardIndex * dealSlots + position) * dealInterval;
+    dealRevealDelay(position,cardIndex,participants.length);
   syncMiniCards(dHand, state.dealerCards, !firstPaint,
     isInitialDeal ? index => delayFor(participants.length, index) : null);
   const visible = state.dealerCards.filter(c => c.rank !== '?');
@@ -587,6 +585,12 @@ function renderTable(state) {
 
 function phaseLabel(phase) {
   return { waiting:'Waiting for players...', betting:'Place your bets!', dealing:'Dealing cards...', playing:'Game in progress', dealer_turn:"Dealer's turn", results:'Round over' }[phase] || phase;
+}
+// Serialized slots: every occupied seat gets its first card, then the dealer,
+ // then each seat gets its second card, then the dealer's face-down card.
+ // Existing rounds/reconnects bypass this entrance delay.
+function dealRevealDelay(position, cardIndex, participatingSeats) {
+  return (cardIndex * (participatingSeats + 1) + position) * 330;
 }
 function formatSeatTotals(hands) {
   const activeHands = (hands || []).filter(hand => Array.isArray(hand.cards) && hand.cards.length);
