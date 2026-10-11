@@ -11,3 +11,6 @@ node_modules/
 **/node_modules/
 *.log
 *.err
+
+# Downloaded payment/CLI executables (not used by free-play casino)
+stripe.exe
