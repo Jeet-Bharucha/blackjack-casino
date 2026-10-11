@@ -32,14 +32,36 @@
             const result=await res.json();
             if(!res.ok)throw Error(result.error||'Could not claim reward');
             balance=result.balance;updateUI();showToast('+'+result.added+' bonus chips!');
-            await loadChallenges();
+            await loadChallenges();refreshMissionSummary();
           }catch(e){showToast(e.message);btn.disabled=false;}
         });
         row.append(title,btn);content.appendChild(row);
       }
     }catch(error){content.textContent=error.message;}
   }
+  async function refreshMissionSummary(){
+    const badge=document.getElementById('missionSummary');
+    if(!badge)return;
+    try{
+      const response=await fetch(api+'/challenges',{
+        headers:{Authorization:'Bearer '+localStorage.getItem('bj_token')}
+      });
+      if(!response.ok)return;
+      const data=await response.json();
+      const missions=Array.isArray(data.challenges)?data.challenges:[];
+      if(!missions.length){badge.textContent='🎯 Daily Missions';return;}
+      const ready=missions.filter(c=>!c.claimed && c.progress>=c.target).length;
+      const claimed=missions.filter(c=>c.claimed).length;
+      badge.textContent=ready?('🎁 '+ready+' ready to claim'):('🎯 '+claimed+'/'+missions.length+' missions claimed');
+      badge.setAttribute('aria-label',ready?
+        ready+' daily missions ready for claiming':claimed+' of '+missions.length+' daily missions claimed');
+      badge.classList.toggle('has-rewards',ready>0);
+    }catch{ /* Mission status is optional; core gameplay stays available. */ }
+  }
   window.addEventListener('bj:round-complete',()=>{
+    refreshMissionSummary();
     if(!panel.classList.contains('hidden'))loadChallenges();
   });
+  window.addEventListener('focus',refreshMissionSummary);
+  refreshMissionSummary();
 })();
