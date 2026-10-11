@@ -819,12 +819,17 @@ app.post('/api/weekly-bonus', auth, async (req, res) => {
     const tier = rows[0].vip_tier || 'Bronze';
     const perks = VIP_PERKS[tier];
     if (!perks.weeklyBonus) return res.status(400).json({ error: 'Weekly bonus not available for your tier' });
-    const lastWeekly = rows[0].last_weekly_bonus;
-    if (lastWeekly && Date.now() - new Date(lastWeekly) < 7 * 86400000)
-      return res.status(400).json({ error: 'Weekly bonus already claimed' });
-    await db.execute('UPDATE users SET balance=balance+?, last_weekly_bonus=NOW() WHERE id=?', [perks.weeklyBonus, req.user.id]);
-    const [updated] = await db.execute('SELECT balance FROM users WHERE id=?', [req.user.id]);
-    res.json({ bonus: perks.weeklyBonus, newBalance: updated[0].balance, tier });
+    // Atomic conditional update: two simultaneous HTTP requests cannot both
+    // claim the same weekly reward, even across multiple Render workers.
+    const [claimed] = await db.execute(`
+      UPDATE users SET balance=balance+?, last_weekly_bonus=UTC_TIMESTAMP()
+      WHERE id=? AND vip_tier=?
+        AND (last_weekly_bonus IS NULL OR last_weekly_bonus<=DATE_SUB(UTC_TIMESTAMP(),INTERVAL 7 DAY))
+    `, [perks.weeklyBonus, req.user.id, tier]);
+    if (claimed.affectedRows !== 1)
+      return res.status(400).json({ error: 'Weekly bonus already claimed. Please refresh your perks.' });
+    const [[updated]] = await db.execute('SELECT balance FROM users WHERE id=?', [req.user.id]);
+    res.json({ bonus: perks.weeklyBonus, newBalance: updated.balance, tier });
   } catch { res.status(500).json({ error: 'Server error' }); }
 });
 
