@@ -67,8 +67,8 @@
 
 <div class="page">
   <div class="page-header">
-    <div class="page-title">Transaction History</div>
-    <div class="page-sub">Your virtual-chip cosmetic purchases</div>
+    <h1 class="page-title">✦ COSMETICS LEDGER</h1>
+    <div class="page-sub">Your cosmetics purchased with virtual chips · No real-money transactions</div>
   </div>
   <div id="content">
     <div class="loading"><div class="spinner"></div>Loading transactions...</div>
@@ -101,7 +101,7 @@ async function loadTransactions() {
         <div class="empty-state">
           <div class="empty-icon">🧾</div>
           <div class="empty-title">No Transactions Yet</div>
-          <div class="empty-sub">Your virtual-chip cosmetic purchases will appear here.</div>
+          <div class="empty-sub">Your cosmetics purchased with virtual chips · No real-money transactions will appear here.</div>
         </div>`;
       return;
     }
@@ -114,13 +114,13 @@ async function loadTransactions() {
       return `<tr>
         <td class="tx-icon">${icon}</td>
         <td><div class="tx-desc">${String(tx.description||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')}</div><div class="tx-type">${typeLabel}</div></td>
-        <td><span class="tx-amount ${amountClass}">${amountSign}$${Number(tx.chips||0).toLocaleString()}</span></td>
+        <td><span class="tx-amount ${amountClass}">${amountSign}${Number(tx.chips||0).toLocaleString()} chips</span></td>
         <td class="tx-date">${formatDate(tx.date)}</td>
       </tr>`;
     }).join('');
 
     document.getElementById('content').innerHTML = `
-      <div class="card-wrap">
+      <div class="card-wrap" role="region" aria-label="Scrollable cosmetic purchases" tabindex="0">
         <table class="tx-table">
           <thead><tr>
             <th></th>
