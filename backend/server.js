@@ -46,6 +46,7 @@ const allowedOrigins = (process.env.FRONTEND_ORIGINS ||
 // Browser and socket transports use the same explicit origin allow-list.
 // Requests without an Origin (health probes, CLI clients) remain supported.
 const io = new Server(server,{
+  maxHttpBufferSize:100_000,
   cors:{origin:allowedOrigins,methods:['GET','POST']},
   allowRequest:(req, callback)=>callback(null,!req.headers.origin||allowedOrigins.includes(req.headers.origin))
 });
@@ -1201,9 +1202,16 @@ io.on('connection',socket=>{
   socket.emit('table_list',getTableList());
   socket.on('auth',({token}={})=>{const u=verifyToken(token);if(u)socketToUser.set(socket.id,u);});
   socket.on('get_tables',()=>socket.emit('table_list',getTableList()));
-  socket.on('create_table',(payload={})=>{
+  socket.on('create_table',async(payload={})=>{
     const {name,token,isPrivate}=payload||{};
     const u=verifyToken(token); if(!u)return socket.emit('error_msg','Not authenticated');
+    try {
+      const [rows]=await db.execute('SELECT is_banned,token_version,self_excluded_until FROM users WHERE id=?',[u.id]);
+      if(!rows.length || !sessionMatches(rows[0],u))
+        return socket.emit('error_msg','Session expired or account unavailable');
+      if(rows[0].self_excluded_until && new Date(rows[0].self_excluded_until).getTime()>Date.now())
+        return socket.emit('error_msg','Self-exclusion is active');
+    } catch {return socket.emit('error_msg','Unable to validate session');}
     if(socketToTable.has(socket.id))return socket.emit('error_msg','Already at a table');
     if(tables.size>=100)return socket.emit('error_msg','Too many tables. Try again later.');
     if(Array.from(tables.values()).some(t=>t.ownerId===u.id && !t.seats.some(Boolean)))
@@ -1242,7 +1250,21 @@ io.on('connection',socket=>{
   socket.on('mp_hit',()=>{ const tableId=socketToTable.get(socket.id); if(!tableId) return; const table=tables.get(tableId); if(!table||table.phase!=='playing') return; const si=table.seats.findIndex(s=>s?.socketId===socket.id); if(si!==table.currentSeat) return; const seat=table.seats[si]; const hand=seat.hands[seat.activeHand]; hand.cards.push(drawCard(table.shoe)); const total=handTotal(hand.cards); broadcastTable(table); if(total>=21){hand.done=true;if(seat.activeHand+1<seat.hands.length){seat.activeHand++;}else{seat.done=true;clearTimers(table);nextPlayerTurn(table,si+1);}} });
   socket.on('mp_stand',()=>{ const tableId=socketToTable.get(socket.id); if(!tableId) return; const table=tables.get(tableId); if(!table||table.phase!=='playing') return; const si=table.seats.findIndex(s=>s?.socketId===socket.id); if(si!==table.currentSeat) return; const seat=table.seats[si]; seat.hands[seat.activeHand].done=true; clearTimers(table); if(seat.activeHand+1<seat.hands.length){seat.activeHand++;nextPlayerTurn(table,si);}else{seat.done=true;nextPlayerTurn(table,si+1);} });
   socket.on('mp_double',()=>{ const tableId=socketToTable.get(socket.id); if(!tableId) return; const table=tables.get(tableId); if(!table||table.phase!=='playing') return; const si=table.seats.findIndex(s=>s?.socketId===socket.id); if(si!==table.currentSeat) return; const seat=table.seats[si]; if(seat.balance<seat.bet) return socket.emit('error_msg','Insufficient balance'); const hand=seat.hands[seat.activeHand]; if(hand.cards.length!==2) return; seat.balance-=hand.bet; hand.bet*=2; hand.doubled=true; hand.cards.push(drawCard(table.shoe)); hand.done=true; seat.done=true; broadcastTable(table); clearTimers(table); nextPlayerTurn(table,si+1); });
-  socket.on('send_chat',(payload={})=>{const message=payload?.message; const tableId=socketToTable.get(socket.id); if(!tableId) return; const table=tables.get(tableId); if(!table||typeof message!=='string'||!message.trim()) return; const u=socketToUser.get(socket.id); const msg={username:u?.username||'Guest',message:message.trim().slice(0,120),time:Date.now()}; table.chat.push(msg); if(table.chat.length>50)table.chat.shift(); io.to(tableId).emit('new_chat',msg); });
+  socket.on('send_chat',(payload={})=>{
+    const message=payload?.message,tableId=socketToTable.get(socket.id);
+    if(!tableId || typeof message!=='string' || !message.trim())return;
+    const table=tables.get(tableId);
+    if(!table)return;
+    const now=Date.now();
+    const times=(socket.data.chatTimes||[]).filter(t=>now-t<5000);
+    if(times.length>=5)return socket.emit('error_msg','Please slow down your messages');
+    times.push(now);socket.data.chatTimes=times;
+    const u=socketToUser.get(socket.id);
+    const msg={username:u?.username||'Guest',message:message.trim().slice(0,120),time:now};
+    table.chat.push(msg);
+    if(table.chat.length>50)table.chat.shift();
+    io.to(tableId).emit('new_chat',msg);
+  });
   socket.on('leave_table',()=>leaveTable(socket));
   socket.on('disconnect',()=>leaveTable(socket,true));
   function leaveTable(socket,disconnected=false){
