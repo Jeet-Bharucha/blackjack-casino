@@ -72,8 +72,8 @@
 
 <div class="page">
   <div class="page-header">
-    <div class="page-title">🏆 Leaderboard</div>
-    <div class="page-sub">Top players ranked by balance</div>
+    <h1 class="page-title">🏆 THE ROYAL RANKINGS</h1>
+    <div class="page-sub">Compare virtual-chip rankings and compete in verified monthly seasons.</div>
     <div class="auto-refresh">Auto-refreshes every 30s <span class="refresh-indicator"></span></div>
   </div>
 
@@ -83,15 +83,15 @@
       <div class="my-name" id="myName">—</div>
       <div class="my-stats" id="myStats">—</div>
     </div>
-    <div class="my-balance" id="myBalance">$—</div>
+    <div class="my-balance" id="myBalance">— chips</div>
   </div>
 
   <div style="display:flex;gap:10px;flex-wrap:wrap;margin:14px 0">
-    <button class="refresh-btn" id="allTimeBtn" onclick="switchBoard('all')">All-time Balance</button>
+    <button class="refresh-btn" id="allTimeBtn" onclick="switchBoard('all')">All-time Chip Balance</button>
     <button class="refresh-btn" id="seasonBtn" onclick="switchBoard('season')">🏆 This Month (UTC)</button>
   </div>
   <div id="seasonNote" style="color:#b6a27b;font-size:12px;margin-bottom:8px"></div>
-  <div id="lbContainer"><div class="loading-state"><div class="spinner"></div>Loading...</div></div>
+  <div id="lbContainer" role="region" aria-label="Player rankings" tabindex="0"><div class="loading-state"><div class="spinner"></div>Loading...</div></div>
   <button class="refresh-btn" onclick="loadLeaderboard()">↻ Refresh Now</button>
 </div>
 
@@ -107,7 +107,7 @@ if (userData.username) {
   document.getElementById('myCard').style.display='flex';
   document.getElementById('myAvatar').textContent=userData.username[0].toUpperCase();
   document.getElementById('myName').textContent=userData.username;
-  document.getElementById('myBalance').textContent='$'+(userData.balance||0).toLocaleString();
+  document.getElementById('myBalance').textContent=(userData.balance||0).toLocaleString()+' chips';
   const s=userData.stats||{};
   const wr=s.totalHands>0?Math.round(s.wins/s.totalHands*100):0;
   document.getElementById('myStats').textContent=`${s.totalHands||0} hands · ${s.wins||0}W ${s.losses||0}L · ${wr}% win rate · ${s.blackjacks||0} blackjacks`;
@@ -117,6 +117,8 @@ const medals=['🥇','🥈','🥉'];
 let boardView='all';
 function switchBoard(view){
   boardView=view;
+  document.getElementById('allTimeBtn').setAttribute('aria-pressed',String(view==='all'));
+  document.getElementById('seasonBtn').setAttribute('aria-pressed',String(view==='season'));
   document.getElementById('seasonNote').textContent=view==='season'?
     'Verified solo rounds only · monthly net chips · resets on the first day of each month (UTC)':'';
   loadLeaderboard();
@@ -154,7 +156,7 @@ async function loadLeaderboard() {
         : '';
       return `<tr class="${isMe?'is-me':''} ${rankClass}">
         <td><div class="rank-cell"><span class="rank-num">${p.rank<=3?medals[p.rank-1]:p.rank}</span>${avatarHTML}<div><span class="player-name ${isMe?'is-me':''}" style="${nameStyle}">${esc(displayName)}</span>${badgeHTML}</div><span class="vip-badge vip-${p.vipTier||'Bronze'}">${p.vipTier||'Bronze'}</span></div></td>
-        <td><span class="balance-cell">$${p.balance.toLocaleString()}</span></td>
+        <td><span class="balance-cell">${p.balance.toLocaleString()} chips</span></td>
         <td>${(p.points||0).toLocaleString()}</td>
         <td>${p.totalHands}</td>
         <td>${p.wins} / ${p.losses}</td>
@@ -169,7 +171,7 @@ async function loadLeaderboard() {
       </table>`;
 
     const me=board.find(p=>p.username===userData.username);
-    if (me) document.getElementById('myBalance').textContent='$'+me.balance.toLocaleString();
+    if (me) document.getElementById('myBalance').textContent=me.balance.toLocaleString()+' chips';
   } catch {
     document.getElementById('lbContainer').innerHTML='<div class="empty-state">Could not load. Is the server running?</div>';
   }
@@ -177,8 +179,10 @@ async function loadLeaderboard() {
 
 function esc(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
+document.getElementById('allTimeBtn').setAttribute('aria-pressed','true');
+document.getElementById('seasonBtn').setAttribute('aria-pressed','false');
 loadLeaderboard();
-setInterval(loadLeaderboard, 30000);
+setInterval(() => { if (!document.hidden) loadLeaderboard(); }, 30000);
 </script>
 <script src="cookie-banner.js"></script>
 </body>
