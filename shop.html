@@ -5,6 +5,8 @@
 <link rel="icon" type="image/svg+xml" href="favicon.svg"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Cosmetics Shop — Blackjack Casino Royale</title>
+<meta name="robots" content="noindex,nofollow"/>
+<meta name="theme-color" content="#090b12"/>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
 body{background:#0a0a0f;color:#f0f0f0;font-family:'Georgia',serif;min-height:100vh;}
@@ -108,8 +110,9 @@ body{background:#0a0a0f;color:#f0f0f0;font-family:'Georgia',serif;min-height:100
 
 @media(max-width:700px){.shop-layout{grid-template-columns:1fr;}.category-sidebar{position:static;display:flex;gap:8px;overflow-x:auto;padding-bottom:8px;max-height:none;}.cat-item{flex-shrink:0;}}
 </style>
+<link rel="stylesheet" href="luxury-pages.css"/>
 </head>
-<body>
+<body class="luxury-page luxury-shop">
 
 <nav class="nav">
   <a class="nav-logo" href="blackjack.html">♠ BLACKJACK</a>
@@ -119,30 +122,30 @@ body{background:#0a0a0f;color:#f0f0f0;font-family:'Georgia',serif;min-height:100
     <a class="nav-link active" href="shop.html">🎨 Shop</a>
     <a class="nav-link" href="leaderboard.html">Leaderboard</a>
     <a class="nav-link" href="profile.html">Profile</a>
-    <span class="nav-balance" id="navBalance">$—</span>
+    <span class="nav-balance" id="navBalance">— chips</span>
   </div>
 </nav>
 
-<div class="page">
-  <div class="page-title">🎨 COSMETICS SHOP</div>
-  <div class="page-sub">Spend your chips to customize your experience</div>
+<main class="page">
+  <h1 class="page-title">✦ THE ROYALE BOUTIQUE</h1>
+  <div class="page-sub">Personalize your table with virtual chips you earn by playing. Nothing here costs real money.</div>
 
   <div class="shop-layout">
-    <div class="category-sidebar">
-      <div class="cat-item active" onclick="filterCat('all')" id="cat-all"><span class="cat-icon">🛍️</span>All Items</div>
-      <div class="cat-item" onclick="filterCat('card_back')" id="cat-card_back"><span class="cat-icon">🃏</span>Card Backs</div>
-      <div class="cat-item" onclick="filterCat('felt')" id="cat-felt"><span class="cat-icon">🟩</span>Table Felt</div>
-      <div class="cat-item" onclick="filterCat('chip')" id="cat-chip"><span class="cat-icon">🔵</span>Chip Designs</div>
-      <div class="cat-item" onclick="filterCat('theme')" id="cat-theme"><span class="cat-icon">🎨</span>Table Themes</div>
-      <div class="cat-item" onclick="filterCat('win_anim')" id="cat-win_anim"><span class="cat-icon">🎉</span>Win Animations</div>
-      <div class="cat-item" onclick="filterCat('badge')" id="cat-badge"><span class="cat-icon">🏅</span>Badges &amp; Titles</div>
-      <div class="cat-item" onclick="filterCat('border')" id="cat-border"><span class="cat-icon">🖼️</span>Avatar Borders</div>
-      <div class="cat-item" onclick="filterCat('sticker')" id="cat-sticker"><span class="cat-icon">😎</span>Sticker Packs</div>
-      <div class="cat-item" onclick="filterCat('name_color')" id="cat-name_color"><span class="cat-icon">✨</span>Name Colors</div>
-      <div class="cat-item" onclick="filterCat('card_anim')" id="cat-card_anim"><span class="cat-icon">🎴</span>Card Animations</div>
-      <div class="cat-item" onclick="filterCat('chip_sound')" id="cat-chip_sound"><span class="cat-icon">🔊</span>Chip Sounds</div>
-      <div class="cat-item" onclick="filterCat('dealer')" id="cat-dealer"><span class="cat-icon">🤵</span>Dealer Avatars</div>
-      <div class="cat-item" onclick="filterCat('perk')" id="cat-perk"><span class="cat-icon">⚡</span>Perks</div>
+    <div class="category-sidebar" aria-label="Shop categories">
+      <button type="button" class="cat-item active" onclick="filterCat('all')" id="cat-all"><span class="cat-icon">🛍️</span>All Items</button>
+      <button type="button" class="cat-item" onclick="filterCat('card_back')" id="cat-card_back"><span class="cat-icon">🃏</span>Card Backs</button>
+      <button type="button" class="cat-item" onclick="filterCat('felt')" id="cat-felt"><span class="cat-icon">🟩</span>Table Felt</button>
+      <button type="button" class="cat-item" onclick="filterCat('chip')" id="cat-chip"><span class="cat-icon">🔵</span>Chip Designs</button>
+      <button type="button" class="cat-item" onclick="filterCat('theme')" id="cat-theme"><span class="cat-icon">🎨</span>Table Themes</button>
+      <button type="button" class="cat-item" onclick="filterCat('win_anim')" id="cat-win_anim"><span class="cat-icon">🎉</span>Win Animations</button>
+      <button type="button" class="cat-item" onclick="filterCat('badge')" id="cat-badge"><span class="cat-icon">🏅</span>Badges &amp; Titles</button>
+      <button type="button" class="cat-item" onclick="filterCat('border')" id="cat-border"><span class="cat-icon">🖼️</span>Avatar Borders</button>
+      <button type="button" class="cat-item" onclick="filterCat('sticker')" id="cat-sticker"><span class="cat-icon">😎</span>Sticker Packs</button>
+      <button type="button" class="cat-item" onclick="filterCat('name_color')" id="cat-name_color"><span class="cat-icon">✨</span>Name Colors</button>
+      <button type="button" class="cat-item" onclick="filterCat('card_anim')" id="cat-card_anim"><span class="cat-icon">🎴</span>Card Animations</button>
+      <button type="button" class="cat-item" onclick="filterCat('chip_sound')" id="cat-chip_sound"><span class="cat-icon">🔊</span>Chip Sounds</button>
+      <button type="button" class="cat-item" onclick="filterCat('dealer')" id="cat-dealer"><span class="cat-icon">🤵</span>Dealer Avatars</button>
+      <button type="button" class="cat-item" onclick="filterCat('perk')" id="cat-perk"><span class="cat-icon">⚡</span>Perks</button>
     </div>
     <div>
       <div class="items-grid" id="itemsGrid">
@@ -150,7 +153,7 @@ body{background:#0a0a0f;color:#f0f0f0;font-family:'Georgia',serif;min-height:100
       </div>
     </div>
   </div>
-</div>
+</main>
 
 <div class="toast" id="toast"></div>
 
@@ -161,6 +164,11 @@ if (!token) window.location.href = 'login.html';
 
 let allItems = [];
 let currentCat = 'all';
+function escapeShopText(value){
+  return String(value ?? '').replace(/[&<>"']/g, char => ({
+    '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'
+  })[char]);
+}
 let myBalance = 0;
 
 const NAME_COLOR_MAP = {
@@ -243,7 +251,7 @@ function previewInner(item) {
   if (item.type === 'chip')      return '<span style="font-size:36px;color:rgba(255,255,255,.6);">●</span>';
   if (item.type === 'theme')     return `<span style="font-size:36px;">${THEME_EMOJI[item.key_name] || '🎨'}</span>`;
   if (item.type === 'win_anim')  return `<span style="font-size:36px;">${WIN_ANIM_EMOJI[item.key_name] || '🎉'}</span>`;
-  if (item.type === 'badge')     return `<span style="font-size:18px;color:#ffd764;font-weight:700;letter-spacing:1px;">${item.name}</span>`;
+  if (item.type === 'badge')     return `<span style="font-size:18px;color:#ffd764;font-weight:700;letter-spacing:1px;">${escapeShopText(item.name)}</span>`;
   if (item.type === 'border') {
     const w = item.key_name === 'neon_glow' ? 60 : 64;
     return `<div style="width:${w}px;height:${w}px;border-radius:50%;"></div>`;
@@ -287,8 +295,8 @@ function renderItems(items) {
       <div class="item-preview ${previewClass(item)}">
         ${previewInner(item)}
       </div>
-      <div class="item-name">${item.name}</div>
-      <div class="item-desc">${item.description || ''}</div>
+      <div class="item-name">${escapeShopText(item.name)}</div>
+      <div class="item-desc">${escapeShopText(item.description)}</div>
       <div class="item-price ${item.price === 0 ? 'free' : ''}">${item.price === 0 ? 'FREE' : `${item.price.toLocaleString()} chips`}</div>
       ${renderItemBtn(item)}
     </div>`;
@@ -311,28 +319,54 @@ function renderItemBtn(item) {
 
 function filterCat(cat) {
   currentCat = cat;
-  document.querySelectorAll('.cat-item').forEach(el => el.classList.remove('active'));
-  document.getElementById('cat-' + cat)?.classList.add('active');
+  document.querySelectorAll('.cat-item').forEach(el => {
+    el.classList.remove('active');
+    el.setAttribute('aria-pressed','false');
+  });
+  const selected = document.getElementById('cat-' + cat);
+  selected?.classList.add('active');
+  selected?.setAttribute('aria-pressed','true');
   const filtered = cat === 'all' ? allItems : allItems.filter(i => i.type === cat);
   renderItems(filtered);
 }
 
+async function requestShop(path, options = {}) {
+  const response = await fetch(API + path, {
+    ...options, headers:{Authorization:`Bearer ${token}`, ...(options.headers || {})}
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data.error) throw Error(data.error || 'Unable to reach the shop. Please try again.');
+  return data;
+}
+
 async function loadShop() {
-  const data = await fetch(`${API}/cosmetics/shop`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json());
-  if (data.error) { console.warn(data.error); return; }
-  allItems = data;
-  filterCat(currentCat);
+  try {
+    const data = await requestShop('/cosmetics/shop');
+    if (!Array.isArray(data)) throw Error('Unexpected shop response');
+    allItems = data;
+    filterCat(currentCat);
+  } catch(error) {
+    showToast('Shop temporarily unavailable. Try refreshing the page.',false);
+    const grid=document.getElementById('itemsGrid');
+    if (!allItems.length) grid.innerHTML = '<p class="page-notice" role="status">Cannot load items right now. Check your connection and refresh.</p>';
+  }
 }
 
 async function buyItem(id) {
   const btn = document.querySelector(`#card-${id} .btn`);
   if (btn) { btn.disabled = true; btn.textContent = 'Buying…'; }
 
-  const data = await fetch(`${API}/cosmetics/buy`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ cosmeticId: id }),
-  }).then(r => r.json());
+  let data;
+  try {
+    data = await requestShop('/cosmetics/buy', {
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({cosmeticId:id})
+    });
+  } catch(error) {
+    showToast('❌ '+error.message,false);
+    if(btn){btn.disabled=false;btn.textContent='Try Again';}
+    return;
+  }
 
   if (data.error) {
     showToast('❌ ' + data.error, false);
@@ -341,7 +375,7 @@ async function buyItem(id) {
   }
 
   myBalance = data.newBalance;
-  document.getElementById('navBalance').textContent = `$${myBalance.toLocaleString()}`;
+  document.getElementById('navBalance').textContent = `${myBalance.toLocaleString()} chips`;
   showToast('✅ Purchased! Item is now available.');
 
   const item = allItems.find(i => i.id === id);
@@ -350,11 +384,16 @@ async function buyItem(id) {
 }
 
 async function equipItem(id) {
-  const data = await fetch(`${API}/cosmetics/equip`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ cosmeticId: id }),
-  }).then(r => r.json());
+  let data;
+  try {
+    data = await requestShop('/cosmetics/equip', {
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({cosmeticId:id})
+    });
+  } catch(error) {
+    showToast('❌ '+error.message,false);
+    return;
+  }
 
   if (data.error) { showToast('❌ ' + data.error, false); return; }
   showToast('✅ Equipped! Changes take effect in-game.');
@@ -373,7 +412,7 @@ fetch(`${API}/me`, { headers: { Authorization: `Bearer ${token}` } })
   .then(r => r.json()).then(u => {
     if (u.error) return;
     myBalance = u.balance;
-    document.getElementById('navBalance').textContent = `$${u.balance.toLocaleString()}`;
+    document.getElementById('navBalance').textContent = `${u.balance.toLocaleString()} chips`;
     loadShop();
   }).catch(() => loadShop());
 </script>

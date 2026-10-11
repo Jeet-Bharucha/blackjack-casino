@@ -5,6 +5,8 @@
 <link rel="icon" type="image/svg+xml" href="favicon.svg"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Blackjack — Transaction History</title>
+<meta name="robots" content="noindex,nofollow"/>
+<meta name="theme-color" content="#090b12"/>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=Cinzel:wght@400;600;700&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap');
   *{margin:0;padding:0;box-sizing:border-box;}
@@ -52,22 +54,23 @@
     .page{padding:28px 12px 48px;}
   }
 </style>
+<link rel="stylesheet" href="luxury-pages.css"/>
 </head>
-<body>
+<body class="luxury-page luxury-history">
 <nav class="nav">
   <a class="nav-logo" href="blackjack.html">♠ BLACKJACK</a>
   <div class="nav-right">
     <a class="nav-link" href="blackjack.html">← Back to Table</a>
     <a class="nav-link" href="history.html">🃏 Game History</a>
     <a class="nav-link" href="profile.html">Profile</a>
-    <span class="nav-link" onclick="logout()">Sign Out</span>
+    <button type="button" class="nav-link nav-action" onclick="logout()">Sign Out</button>
   </div>
 </nav>
 
 <div class="page">
   <div class="page-header">
-    <div class="page-title">Transaction History</div>
-    <div class="page-sub">Your virtual-chip cosmetic purchases</div>
+    <h1 class="page-title">✦ COSMETICS LEDGER</h1>
+    <div class="page-sub">Your cosmetics purchased with virtual chips · No real-money transactions</div>
   </div>
   <div id="content">
     <div class="loading"><div class="spinner"></div>Loading transactions...</div>
@@ -100,7 +103,7 @@ async function loadTransactions() {
         <div class="empty-state">
           <div class="empty-icon">🧾</div>
           <div class="empty-title">No Transactions Yet</div>
-          <div class="empty-sub">Your virtual-chip cosmetic purchases will appear here.</div>
+          <div class="empty-sub">Your cosmetics purchased with virtual chips · No real-money transactions will appear here.</div>
         </div>`;
       return;
     }
@@ -113,13 +116,13 @@ async function loadTransactions() {
       return `<tr>
         <td class="tx-icon">${icon}</td>
         <td><div class="tx-desc">${String(tx.description||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')}</div><div class="tx-type">${typeLabel}</div></td>
-        <td><span class="tx-amount ${amountClass}">${amountSign}$${Number(tx.chips||0).toLocaleString()}</span></td>
+        <td><span class="tx-amount ${amountClass}">${amountSign}${Number(tx.chips||0).toLocaleString()} chips</span></td>
         <td class="tx-date">${formatDate(tx.date)}</td>
       </tr>`;
     }).join('');
 
     document.getElementById('content').innerHTML = `
-      <div class="card-wrap">
+      <div class="card-wrap" role="region" aria-label="Scrollable cosmetic purchases" tabindex="0">
         <table class="tx-table">
           <thead><tr>
             <th></th>

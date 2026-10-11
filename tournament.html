@@ -5,6 +5,8 @@
 <link rel="icon" type="image/svg+xml" href="favicon.svg"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Tournaments — Blackjack Casino Royale</title>
+<meta name="robots" content="noindex,nofollow"/>
+<meta name="theme-color" content="#090b12"/>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
 body{background:#0a0a0f;color:#f0f0f0;font-family:'Georgia',serif;min-height:100vh;}
@@ -95,8 +97,9 @@ body{background:#0a0a0f;color:#f0f0f0;font-family:'Georgia',serif;min-height:100
 
 @media(max-width:600px){.tourn-grid{grid-template-columns:1fr;}.nav-links .nav-link:not(.active):not(:last-child){display:none;}}
 </style>
+<link rel="stylesheet" href="luxury-pages.css"/>
 </head>
-<body>
+<body class="luxury-page luxury-tournament">
 
 <nav class="nav">
   <a class="nav-logo" href="blackjack.html">♠ BLACKJACK</a>
@@ -106,42 +109,42 @@ body{background:#0a0a0f;color:#f0f0f0;font-family:'Georgia',serif;min-height:100
     <a class="nav-link" href="shop.html">🎨 Shop</a>
     <a class="nav-link" href="leaderboard.html">Leaderboard</a>
     <a class="nav-link" href="profile.html">Profile</a>
-    <span class="nav-balance" id="navBalance">$—</span>
+    <span class="nav-balance" id="navBalance">— chips</span>
   </div>
 </nav>
 
-<div class="page">
-  <div class="page-title">🏆 TOURNAMENTS</div>
+<main class="page">
+  <h1 class="page-title">🏆 ROYALE TOURNAMENTS</h1>
   <p style="padding:12px;border:1px solid rgba(255,215,100,.3);border-radius:8px;background:rgba(255,215,100,.08);font-family:Georgia,serif;font-size:13px;line-height:1.5;margin:14px 0 22px">
     Tournament points are now earned through server-verified solo Blackjack hands only.
     Join an active tournament, then use <a href="blackjack.html" style="color:#ffd764">Play Blackjack</a> to compete.
     You cannot submit scores manually.
   </p>
-  <div class="page-sub">Buy in · Compete · Win the prize pool</div>
+  <div class="page-sub">Enter with virtual chips · Compete through verified solo rounds · Win virtual-chip prizes only</div>
 
-  <div class="tabs">
-    <div class="tab active" onclick="switchTab('active')">Active & Upcoming</div>
-    <div class="tab" onclick="switchTab('recent')">Recent Results</div>
+  <div class="tabs" role="tablist" aria-label="Tournament views">
+    <button type="button" class="tab active" id="tournTabActive" role="tab" aria-selected="true" aria-controls="tab-active" onclick="switchTab('active')">Active & Upcoming</button>
+    <button type="button" class="tab" id="tournTabRecent" role="tab" aria-selected="false" aria-controls="tab-recent" onclick="switchTab('recent')">Recent Results</button>
   </div>
 
-  <div class="tab-panel active" id="tab-active">
+  <div class="tab-panel active" id="tab-active" role="tabpanel" aria-labelledby="tournTabActive">
     <div class="tourn-grid" id="activeGrid">
       <div class="empty-state"><div class="empty-icon">⏳</div><div class="empty-title">Loading tournaments…</div></div>
     </div>
   </div>
-  <div class="tab-panel" id="tab-recent">
+  <div class="tab-panel" id="tab-recent" role="tabpanel" aria-labelledby="tournTabRecent">
     <div class="tourn-grid" id="recentGrid">
       <div class="empty-state"><div class="empty-icon">📋</div><div class="empty-title">No recent tournaments</div></div>
     </div>
   </div>
-</div>
+</main>
 
 <!-- Leaderboard Modal -->
-<div class="modal-overlay" id="lbModal">
+<div class="modal-overlay" id="lbModal" role="dialog" aria-modal="true" aria-labelledby="lbModalTitle">
   <div class="modal">
     <div class="modal-header">
       <div class="modal-title" id="lbModalTitle">Tournament Leaderboard</div>
-      <button class="modal-close" onclick="closeLbModal()">✕</button>
+      <button type="button" class="modal-close" onclick="closeLbModal()" aria-label="Close tournament leaderboard">✕</button>
     </div>
     <div class="modal-body" id="lbModalBody">
       <div class="empty-state"><div class="empty-icon">⏳</div><div class="empty-title">Loading…</div></div>
@@ -156,11 +159,28 @@ let myUsername = null;
 
 if (!token) { window.location.href = 'login.html'; }
 
+function escapeTournamentText(value) {
+  return String(value ?? '').replace(/[&<>"']/g, char => ({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  })[char]);
+}
+function safeAvatarSrc(value){
+  const src=String(value||'');
+  if (/^data:image\/(?:png|jpeg|webp|gif);base64,[A-Za-z0-9+/=]+$/.test(src) ||
+      /^https:\/\/[^\s<>"']+$/.test(src)) return escapeTournamentText(src);
+  return null;
+}
 async function api(method, path, body) {
   const opts = { method, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` } };
   if (body) opts.body = JSON.stringify(body);
-  const r = await fetch(API + path, opts);
-  return r.json();
+  try {
+    const r = await fetch(API + path, opts);
+    const result=await r.json();
+    if (!r.ok && !result.error) return {error:'Server temporarily unavailable'};
+    return result;
+  } catch {
+    return {error:'Connection unavailable. Try again in a moment.'};
+  }
 }
 
 function formatDate(d) {
@@ -182,20 +202,22 @@ function countdown(endsAt) {
 
 function renderTournCard(t, isMine) {
   const joined = t.my_chips !== null && t.my_chips !== undefined;
-  const pct = Math.min(100, Math.round((t.entrant_count || 0) / t.max_players * 100));
+  const pct = t.max_players > 0
+    ? Math.max(0, Math.min(100, Math.round((t.entrant_count || 0) / t.max_players * 100)))
+    : 0;
   const statusLabel = { upcoming:'UPCOMING', active:'LIVE', ended:'ENDED' }[t.status] || t.status.toUpperCase();
   const badgeClass = { upcoming:'badge-upcoming', active:'badge-active', ended:'badge-ended' }[t.status];
 
   return `
     <div class="tourn-card ${t.status === 'active' ? 'active-tourn' : ''}">
       <div class="tourn-badge ${badgeClass}">${statusLabel}</div>
-      <div class="tourn-name">${t.name}</div>
-      <div class="tourn-type">${t.type} tournament</div>
+      <div class="tourn-name">${escapeTournamentText(t.name)}</div>
+      <div class="tourn-type">${escapeTournamentText(t.type)} tournament</div>
       ${joined && t.status === 'active' ? `
         <div class="tourn-my-entry">
           <div>
             <div style="font-size:10px;color:rgba(255,255,255,.3);letter-spacing:1px;margin-bottom:2px;">YOUR CHIPS</div>
-            <div class="entry-chips">$${Number(t.my_chips).toLocaleString()}</div>
+            <div class="entry-chips">${Number(t.my_chips).toLocaleString()} chips</div>
           </div>
           <div>
             <div style="font-size:10px;color:rgba(255,255,255,.3);letter-spacing:1px;margin-bottom:2px;">HANDS</div>
@@ -206,11 +228,11 @@ function renderTournCard(t, isMine) {
       <div class="tourn-meta">
         <div class="tourn-meta-item">
           <div class="tourn-meta-label">BUY-IN</div>
-          <div class="tourn-meta-val">$${Number(t.buy_in).toLocaleString()}</div>
+          <div class="tourn-meta-val">${Number(t.buy_in).toLocaleString()} chips</div>
         </div>
         <div class="tourn-meta-item">
           <div class="tourn-meta-label">PRIZE POOL</div>
-          <div class="tourn-meta-val">$${Number(t.prize_pool).toLocaleString()}</div>
+          <div class="tourn-meta-val">${Number(t.prize_pool).toLocaleString()} chips</div>
         </div>
         <div class="tourn-meta-item">
           <div class="tourn-meta-label">PLAYERS</div>
@@ -226,18 +248,31 @@ function renderTournCard(t, isMine) {
       <div class="tourn-progress"><div class="tourn-progress-fill" style="width:${pct}%"></div></div>
       ${t.status !== 'ended' ? `
         ${joined
-          ? `<button class="btn btn-outline" onclick="viewLeaderboard(${t.id},'${t.name}')">📊 View Leaderboard</button>
+          ? `<button class="btn btn-outline" onclick="viewLeaderboard(${t.id},this.closest('.tourn-card').querySelector('.tourn-name').textContent)">📊 View Leaderboard</button>
              ${t.status === 'active' ? `<div style="margin-top:10px;"><a href="blackjack.html?tournament=${t.id}" class="btn btn-gold" style="display:block;text-align:center;text-decoration:none;">Play in Tournament →</a></div>` : ''}`
-          : `<button class="btn btn-gold" onclick="joinTournament(${t.id},this)">Join — Buy In $${Number(t.buy_in).toLocaleString()}</button>`
+          : `<button class="btn btn-gold" onclick="joinTournament(${t.id},this)">Join — ${Number(t.buy_in).toLocaleString()} chips</button>`
         }
-      ` : `<button class="btn btn-outline" onclick="viewLeaderboard(${t.id},'${t.name}')">📊 Final Results</button>`}
+      ` : `<button class="btn btn-outline" onclick="viewLeaderboard(${t.id},this.closest('.tourn-card').querySelector('.tourn-name').textContent)">📊 Final Results</button>`}
     </div>`;
 }
 
+let activeCountdowns=[];
+setInterval(()=>{
+  if(document.hidden)return;
+  activeCountdowns.forEach(t=>{
+    const el=document.getElementById(`cd-${t.id}`);
+    if(el)el.textContent=countdown(t.ends_at);
+  });
+},1000);
+
 async function loadTournaments() {
   const data = await api('GET', '/tournaments');
-  if (data.error) { console.warn(data.error); return; }
+  if (data.error) {
+    document.getElementById('activeGrid').innerHTML='<p class="page-notice" role="status">Unable to load tournaments. Please refresh and try again.</p>';
+    return;
+  }
 
+  activeCountdowns = [];
   const activeGrid = document.getElementById('activeGrid');
   const recentGrid = document.getElementById('recentGrid');
 
@@ -245,13 +280,7 @@ async function loadTournaments() {
     activeGrid.innerHTML = `<div class="empty-state"><div class="empty-icon">🏆</div><div class="empty-title">No active tournaments right now</div><div class="empty-sub">Check back soon — new tournaments start regularly!</div></div>`;
   } else {
     activeGrid.innerHTML = data.active.map(t => renderTournCard(t)).join('');
-    // Live countdown
-    setInterval(() => {
-      data.active.filter(t => t.status === 'active').forEach(t => {
-        const el = document.getElementById(`cd-${t.id}`);
-        if (el) el.textContent = countdown(t.ends_at);
-      });
-    }, 1000);
+    activeCountdowns = data.active.filter(t=>t.status==='active');
   }
 
   if (!data.recent?.length) {
@@ -271,8 +300,8 @@ async function joinTournament(id, btn) {
     btn.textContent = btn.textContent.replace('Joining…', 'Join');
     return;
   }
-  document.getElementById('navBalance').textContent = `$${data.newBalance.toLocaleString()}`;
-  alert(`✅ Joined! You start with $${data.startingChips.toLocaleString()} tournament chips.\nGood luck at the tables!`);
+  document.getElementById('navBalance').textContent = `${data.newBalance.toLocaleString()} chips`;
+  alert(`✅ Joined! You start with ${data.startingChips.toLocaleString()} virtual tournament chips.\nGood luck at the tables!`);
   loadTournaments();
 }
 
@@ -282,7 +311,7 @@ async function viewLeaderboard(id, name) {
   document.getElementById('lbModal').classList.add('open');
 
   const data = await api('GET', `/tournaments/${id}`);
-  if (data.error) { document.getElementById('lbModalBody').innerHTML = `<p style="color:red;">${data.error}</p>`; return; }
+  if (data.error) { document.getElementById('lbModalBody').textContent = data.error; return; }
 
   const lb = data.leaderboard || [];
   if (!lb.length) {
@@ -304,11 +333,11 @@ async function viewLeaderboard(id, name) {
           <td class="lb-rank ${rankClass(p.rank)}">${rankIcon(p.rank)}</td>
           <td>
             <div class="lb-user">
-              ${p.avatar ? `<img class="lb-avatar" src="${p.avatar}" alt="">` : `<div class="lb-avatar">${(p.display_name||p.username)[0].toUpperCase()}</div>`}
-              <div class="lb-name">${p.display_name || p.username}${p.username === myUsername ? ' (you)' : ''}</div>
+              ${safeAvatarSrc(p.avatar) ? `<img class="lb-avatar" src="${safeAvatarSrc(p.avatar)}" alt="">` : `<div class="lb-avatar">${escapeTournamentText((p.display_name||p.username)[0].toUpperCase())}</div>`}
+              <div class="lb-name">${escapeTournamentText(p.display_name || p.username)}${p.username === myUsername ? ' (you)' : ''}</div>
             </div>
           </td>
-          <td class="lb-chips">$${Number(p.current_chips).toLocaleString()}</td>
+          <td class="lb-chips">${Number(p.current_chips).toLocaleString()} chips</td>
           <td style="color:rgba(255,255,255,.4);">${p.hands_played}</td>
         </tr>`).join('')}
       </tbody>
@@ -319,9 +348,16 @@ function closeLbModal() {
   document.getElementById('lbModal').classList.remove('open');
 }
 document.getElementById('lbModal').addEventListener('click', e => { if (e.target === e.currentTarget) closeLbModal(); });
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && document.getElementById('lbModal').classList.contains('open')) closeLbModal();
+});
 
 function switchTab(tab) {
-  document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', ['active','recent'][i] === tab));
+  document.querySelectorAll('.tab').forEach((t,i) => {
+    const selected=['active','recent'][i]===tab;
+    t.classList.toggle('active',selected);
+    t.setAttribute('aria-selected',String(selected));
+  });
   document.querySelectorAll('.tab-panel').forEach((p,i) => p.classList.toggle('active', ['tab-active','tab-recent'][i] === 'tab-' + tab));
 }
 
@@ -330,8 +366,8 @@ fetch(`${API}/me`, { headers: { Authorization: `Bearer ${token}` } })
   .then(r => r.json()).then(u => {
     if (u.error) return;
     myUsername = u.username;
-    document.getElementById('navBalance').textContent = `$${u.balance.toLocaleString()}`;
-  });
+    document.getElementById('navBalance').textContent = `${u.balance.toLocaleString()} chips`;
+  }).catch(()=>{});
 
 loadTournaments();
 </script>

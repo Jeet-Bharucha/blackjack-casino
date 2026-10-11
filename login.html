@@ -4,7 +4,9 @@
 <meta charset="UTF-8"/>
 <link rel="icon" type="image/svg+xml" href="favicon.svg"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Blackjack — Sign In</title>
+<title>Sign In | Blackjack Casino Royale</title>
+<meta name="robots" content="noindex,nofollow"/>
+<meta name="theme-color" content="#090b12"/>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=Cinzel:wght@400;600;700&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap');
 
@@ -113,8 +115,9 @@
   .reset-code-value { font-size: 28px; font-weight: 700; color: #4cff91; font-family: 'Playfair Display', serif; letter-spacing: 8px; }
   .reset-code-note { font-size: 11px; color: rgba(255,255,255,0.3); font-family: 'Crimson Text', serif; margin-top: 4px; font-style: italic; }
 </style>
+<link rel="stylesheet" href="luxury-pages.css"/>
 </head>
-<body>
+<body class="luxury-auth">
 
 <div class="bg-cards" id="bgCards"></div>
 
@@ -125,25 +128,25 @@
     <div class="logo-sub">Casino Royale</div>
   </div>
 
-  <div class="tabs" id="mainTabs">
-    <div class="tab active" onclick="switchTab('login')">Sign In</div>
-    <div class="tab" onclick="switchTab('register')">Register</div>
+  <div class="tabs" id="mainTabs" role="tablist" aria-label="Account access">
+    <button class="tab active" type="button" role="tab" aria-selected="true" aria-controls="loginForm" onclick="switchTab('login')">Sign In</button>
+    <button class="tab" type="button" role="tab" aria-selected="false" aria-controls="registerForm" onclick="switchTab('register')">Register</button>
   </div>
 
   <!-- Login -->
   <form class="form active" id="loginForm" onsubmit="handleLogin(event)">
     <div class="field">
-      <label>Email</label>
+      <label for="loginEmail">Email</label>
       <input type="email" id="loginEmail" placeholder="you@example.com" required autocomplete="email"/>
     </div>
     <div class="field">
-      <label>Password</label>
+      <label for="loginPassword">Password</label>
       <div class="pw-wrap">
         <input type="password" id="loginPassword" placeholder="••••••••" required autocomplete="current-password"/>
-        <button type="button" class="pw-toggle" onclick="togglePw('loginPassword', this)" tabindex="-1">👁</button>
+        <button type="button" class="pw-toggle" onclick="togglePw('loginPassword', this)" aria-label="Show password">👁</button>
       </div>
     </div>
-    <div class="forgot-link" onclick="showForgot()">Forgot password?</div>
+    <button type="button" class="forgot-link" onclick="showForgot()">Forgot password?</button>
     <div class="error-msg" id="loginError"></div>
     <button class="btn-submit" type="submit" id="loginBtn">Enter the Table</button>
   </form>
@@ -151,28 +154,28 @@
   <!-- Register -->
   <form class="form" id="registerForm" onsubmit="handleRegister(event)">
     <div class="field">
-      <label>Username</label>
+      <label for="regUsername">Username</label>
       <input type="text" id="regUsername" placeholder="HighRoller99" required minlength="3" maxlength="20" autocomplete="username"/>
     </div>
     <div class="field">
-      <label>Email</label>
+      <label for="regEmail">Email</label>
       <input type="email" id="regEmail" placeholder="you@example.com" required autocomplete="email"/>
     </div>
     <div class="field">
-      <label>Date of Birth</label>
+      <label for="regDob">Date of Birth</label>
       <input type="date" id="regDob" required max="" autocomplete="bday"/>
     </div>
     <div class="field">
-      <label>Password</label>
+      <label for="regPassword">Password</label>
       <div class="pw-wrap">
         <input type="password" id="regPassword" placeholder="Min. 10 characters" required minlength="10" autocomplete="new-password"/>
-        <button type="button" class="pw-toggle" onclick="togglePw('regPassword', this)" tabindex="-1">👁</button>
+        <button type="button" class="pw-toggle" onclick="togglePw('regPassword', this)" aria-label="Show password">👁</button>
       </div>
     </div>
     <div class="error-msg" id="registerError"></div>
     <button class="btn-submit" type="submit" id="registerBtn">Create Account</button>
     <div class="divider">welcome bonus</div>
-    <div class="bonus-note">Start with <span>$500</span> in chips — free · Must be 21+<br/>No government ID or selfie upload required</div>
+    <div class="bonus-note">Start with <span>500 virtual chips</span> — free · Must be 21+<br/>No government ID or selfie upload required</div>
     <div style="text-align:center;font-family:'Crimson Text',serif;font-size:12px;color:rgba(255,255,255,0.25);margin-top:8px;">By registering you agree to our <a href="terms.html" style="color:rgba(255,215,100,0.45);text-decoration:none;transition:color .2s;" onmouseover="this.style.color='#ffd764'" onmouseout="this.style.color='rgba(255,215,100,0.45)'">Terms of Service</a> and <a href="privacy.html" style="color:rgba(255,215,100,0.45);text-decoration:none;transition:color .2s;" onmouseover="this.style.color='#ffd764'" onmouseout="this.style.color='rgba(255,215,100,0.45)'">Privacy Policy</a></div>
   </form>
 
@@ -204,7 +207,7 @@
       <label>New Password</label>
       <div class="pw-wrap">
         <input type="password" id="resetPassword" placeholder="Min. 10 characters" minlength="10" autocomplete="new-password"/>
-        <button type="button" class="pw-toggle" onclick="togglePw('resetPassword', this)" tabindex="-1">👁</button>
+        <button type="button" class="pw-toggle" onclick="togglePw('resetPassword', this)" aria-label="Show password">👁</button>
       </div>
     </div>
     <div class="error-msg" id="resetError"></div>
@@ -220,8 +223,10 @@
 
   function togglePw(inputId, btn) {
     const input = document.getElementById(inputId);
-    if (input.type === 'password') { input.type = 'text'; btn.textContent = '🙈'; }
-    else { input.type = 'password'; btn.textContent = '👁'; }
+    const reveal = input.type === 'password';
+    input.type = reveal ? 'text' : 'password';
+    btn.textContent = reveal ? '🙈' : '👁';
+    btn.setAttribute('aria-label', reveal ? 'Hide password' : 'Show password');
   }
 
   // Never trust an old token just because it exists in localStorage.
@@ -268,7 +273,11 @@
   }
 
   function switchTab(tab) {
-    document.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', (i === 0 && tab === 'login') || (i === 1 && tab === 'register')));
+    document.querySelectorAll('.tab').forEach((t, i) => {
+      const selected=(i === 0 && tab === 'login') || (i === 1 && tab === 'register');
+      t.classList.toggle('active', selected);
+      t.setAttribute('aria-selected',String(selected));
+    });
     hideAll();
     document.getElementById(tab === 'login' ? 'loginForm' : 'registerForm').classList.add('active');
     document.getElementById('mainTabs').style.display = 'flex';

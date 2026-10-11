@@ -5,6 +5,8 @@
 <link rel="icon" type="image/svg+xml" href="favicon.svg"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Blackjack — Leaderboard</title>
+<meta name="robots" content="noindex,nofollow"/>
+<meta name="theme-color" content="#090b12"/>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=Cinzel:wght@400;600;700&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap');
   *{margin:0;padding:0;box-sizing:border-box;}
@@ -57,22 +59,23 @@
   @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
   @keyframes lbRainbow{0%{color:#ff0000}16%{color:#ff8800}33%{color:#ffff00}50%{color:#00ff00}66%{color:#0088ff}83%{color:#8800ff}100%{color:#ff0000}}
 </style>
+<link rel="stylesheet" href="luxury-pages.css"/>
 </head>
-<body>
+<body class="luxury-page luxury-leaderboard">
 <nav class="nav">
   <div class="nav-logo">♠ BLACKJACK</div>
   <div class="nav-right">
     <a class="nav-link" href="blackjack.html">← Back to Table</a>
     <a class="nav-link" href="multiplayer.html">🃏 Multiplayer</a>
     <a class="nav-link" href="profile.html">👤 Profile</a>
-    <span class="nav-link" onclick="logout()">Sign Out</span>
+    <button type="button" class="nav-link nav-action" onclick="logout()">Sign Out</button>
   </div>
 </nav>
 
 <div class="page">
   <div class="page-header">
-    <div class="page-title">🏆 Leaderboard</div>
-    <div class="page-sub">Top players ranked by balance</div>
+    <h1 class="page-title">🏆 THE ROYAL RANKINGS</h1>
+    <div class="page-sub">Compare virtual-chip rankings and compete in verified monthly seasons.</div>
     <div class="auto-refresh">Auto-refreshes every 30s <span class="refresh-indicator"></span></div>
   </div>
 
@@ -82,15 +85,15 @@
       <div class="my-name" id="myName">—</div>
       <div class="my-stats" id="myStats">—</div>
     </div>
-    <div class="my-balance" id="myBalance">$—</div>
+    <div class="my-balance" id="myBalance">— chips</div>
   </div>
 
   <div style="display:flex;gap:10px;flex-wrap:wrap;margin:14px 0">
-    <button class="refresh-btn" id="allTimeBtn" onclick="switchBoard('all')">All-time Balance</button>
+    <button class="refresh-btn" id="allTimeBtn" onclick="switchBoard('all')">All-time Chip Balance</button>
     <button class="refresh-btn" id="seasonBtn" onclick="switchBoard('season')">🏆 This Month (UTC)</button>
   </div>
   <div id="seasonNote" style="color:#b6a27b;font-size:12px;margin-bottom:8px"></div>
-  <div id="lbContainer"><div class="loading-state"><div class="spinner"></div>Loading...</div></div>
+  <div id="lbContainer" role="region" aria-label="Player rankings" tabindex="0"><div class="loading-state"><div class="spinner"></div>Loading...</div></div>
   <button class="refresh-btn" onclick="loadLeaderboard()">↻ Refresh Now</button>
 </div>
 
@@ -106,7 +109,7 @@ if (userData.username) {
   document.getElementById('myCard').style.display='flex';
   document.getElementById('myAvatar').textContent=userData.username[0].toUpperCase();
   document.getElementById('myName').textContent=userData.username;
-  document.getElementById('myBalance').textContent='$'+(userData.balance||0).toLocaleString();
+  document.getElementById('myBalance').textContent=(userData.balance||0).toLocaleString()+' chips';
   const s=userData.stats||{};
   const wr=s.totalHands>0?Math.round(s.wins/s.totalHands*100):0;
   document.getElementById('myStats').textContent=`${s.totalHands||0} hands · ${s.wins||0}W ${s.losses||0}L · ${wr}% win rate · ${s.blackjacks||0} blackjacks`;
@@ -116,6 +119,8 @@ const medals=['🥇','🥈','🥉'];
 let boardView='all';
 function switchBoard(view){
   boardView=view;
+  document.getElementById('allTimeBtn').setAttribute('aria-pressed',String(view==='all'));
+  document.getElementById('seasonBtn').setAttribute('aria-pressed',String(view==='season'));
   document.getElementById('seasonNote').textContent=view==='season'?
     'Verified solo rounds only · monthly net chips · resets on the first day of each month (UTC)':'';
   loadLeaderboard();
@@ -143,8 +148,9 @@ async function loadLeaderboard() {
       const isMe=p.username===userData.username;
       const wr=p.winRate, wrClass=wr>=50?'high':wr>=35?'mid':'low';
       const rankClass=p.rank<=3?`rank-${p.rank}`:'';
-      const avatarHTML=p.avatar
-        ?`<div class="player-avatar"><img src="${p.avatar}" alt=""/></div>`
+      const avatarSrc=safeAvatarSrc(p.avatar);
+      const avatarHTML=avatarSrc
+        ?`<div class="player-avatar"><img src="${avatarSrc}" alt=""/></div>`
         :`<div class="player-avatar">${esc((p.displayName||p.username)[0].toUpperCase())}</div>`;
       const displayName=p.displayName||p.username;
       const nameStyle = p.equippedNameColor && NAME_COLOR_CSS[p.equippedNameColor] ? NAME_COLOR_CSS[p.equippedNameColor] : '';
@@ -153,7 +159,7 @@ async function loadLeaderboard() {
         : '';
       return `<tr class="${isMe?'is-me':''} ${rankClass}">
         <td><div class="rank-cell"><span class="rank-num">${p.rank<=3?medals[p.rank-1]:p.rank}</span>${avatarHTML}<div><span class="player-name ${isMe?'is-me':''}" style="${nameStyle}">${esc(displayName)}</span>${badgeHTML}</div><span class="vip-badge vip-${p.vipTier||'Bronze'}">${p.vipTier||'Bronze'}</span></div></td>
-        <td><span class="balance-cell">$${p.balance.toLocaleString()}</span></td>
+        <td><span class="balance-cell">${p.balance.toLocaleString()} chips</span></td>
         <td>${(p.points||0).toLocaleString()}</td>
         <td>${p.totalHands}</td>
         <td>${p.wins} / ${p.losses}</td>
@@ -168,16 +174,28 @@ async function loadLeaderboard() {
       </table>`;
 
     const me=board.find(p=>p.username===userData.username);
-    if (me) document.getElementById('myBalance').textContent='$'+me.balance.toLocaleString();
+    if (me) document.getElementById('myBalance').textContent=me.balance.toLocaleString()+' chips';
   } catch {
     document.getElementById('lbContainer').innerHTML='<div class="empty-state">Could not load. Is the server running?</div>';
   }
 }
 
-function esc(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function esc(s){
+  return String(s??'').replace(/[&<>"']/g,c=>({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  })[c]);
+}
+function safeAvatarSrc(value){
+  const src=String(value||'');
+  if (/^data:image\/(?:png|jpeg|webp|gif);base64,[A-Za-z0-9+/=]+$/.test(src) ||
+      /^https:\/\/[^\s<>"']+$/.test(src)) return esc(src);
+  return null;
+}
 
+document.getElementById('allTimeBtn').setAttribute('aria-pressed','true');
+document.getElementById('seasonBtn').setAttribute('aria-pressed','false');
 loadLeaderboard();
-setInterval(loadLeaderboard, 30000);
+setInterval(() => { if (!document.hidden) loadLeaderboard(); }, 30000);
 </script>
 <script src="cookie-banner.js"></script>
 </body>

@@ -4,7 +4,9 @@
 <meta charset="UTF-8"/>
 <link rel="icon" type="image/svg+xml" href="favicon.svg"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Blackjack — Profile</title>
+<title>Player Profile | Blackjack Casino Royale</title>
+<meta name="robots" content="noindex,nofollow"/>
+<meta name="theme-color" content="#090b12"/>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=Cinzel:wght@400;600;700&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap');
   *{margin:0;padding:0;box-sizing:border-box;}
@@ -136,14 +138,15 @@
   .btn-del-cancel:hover{border-color:rgba(255,255,255,.35);color:#fff;}
   .del-error{font-size:12px;color:#ff6b6b;font-family:'Crimson Text',serif;min-height:16px;margin-bottom:8px;}
 </style>
+<link rel="stylesheet" href="luxury-pages.css"/>
 </head>
-<body>
+<body class="luxury-page luxury-profile">
 <nav class="nav">
   <div class="nav-logo">♠ BLACKJACK</div>
   <div class="nav-right">
     <a class="nav-link" href="blackjack.html">← Back to Table</a>
     <a class="nav-link" href="leaderboard.html">🏆 Leaderboard</a>
-    <span class="nav-link" onclick="logout()">Sign Out</span>
+    <button type="button" class="nav-link nav-action" onclick="logout()">Sign Out</button>
   </div>
 </nav>
 
@@ -185,7 +188,17 @@ let profileData = null;
 
 function logout(){ localStorage.removeItem('bj_token'); localStorage.removeItem('bj_user'); window.location.href='login.html'; }
 function showToast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2500); }
-function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function esc(s){
+  return String(s).replace(/[&<>"']/g,c=>({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  })[c]);
+}
+function safeAvatarSrc(value){
+  const src=String(value||'');
+  if (/^data:image\/(?:png|jpeg|webp|gif);base64,[A-Za-z0-9+/=]+$/.test(src) ||
+      /^https:\/\/[^\s<>"']+$/.test(src)) return esc(src);
+  return null;
+}
 
 const ALL_ACHIEVEMENTS = [
   { key:'first_hand',      name:'First Hand',    desc:'Play your first hand',      icon:'🃏' },
@@ -193,11 +206,11 @@ const ALL_ACHIEVEMENTS = [
   { key:'win_streak_3',   name:'Hot Streak',     desc:'Win 3 hands in a row',      icon:'🔥' },
   { key:'win_streak_5',   name:'On Fire',        desc:'Win 5 hands in a row',      icon:'💥' },
   { key:'win_streak_10',  name:'Unstoppable',    desc:'Win 10 hands in a row',     icon:'👑' },
-  { key:'high_roller',    name:'High Roller',    desc:'Win with a $100+ bet',      icon:'💰' },
+  { key:'high_roller',    name:'High Roller',    desc:'Win with a 100+ chip bet',      icon:'💰' },
   { key:'comeback',       name:'Comeback Kid',   desc:'Win when nearly broke',     icon:'💪' },
   { key:'veteran_100',    name:'Veteran',        desc:'Play 100 hands',            icon:'🎖️' },
   { key:'veteran_500',    name:'Elite',          desc:'Play 500 hands',            icon:'🏆' },
-  { key:'rich',           name:'Millionaire',    desc:'Reach $10,000 balance',     icon:'💎' },
+  { key:'rich',           name:'Millionaire',    desc:'Reach 10,000 virtual chips',     icon:'💎' },
   { key:'double_win',     name:'Doubling Down',  desc:'Win a doubled hand',        icon:'✌️' },
   { key:'split_win',      name:'Split Decision', desc:'Win after splitting',       icon:'⚡' },
 ];
@@ -245,8 +258,9 @@ function render(data) {
   const tp = getTierProgress(totalWon);
   const displayName = data.displayName || data.username;
 
-  const avatarHTML = data.avatar
-    ? `<img src="${data.avatar}" alt="avatar"/>`
+  const safeAvatar = safeAvatarSrc(data.avatar);
+  const avatarHTML = safeAvatar
+    ? `<img src="${safeAvatar}" alt="avatar"/>`
     : esc(displayName[0].toUpperCase());
 
   const editSection = isOwnProfile ? `
@@ -295,7 +309,7 @@ function render(data) {
 
   document.getElementById('page').innerHTML = `
     <div class="profile-hero">
-      <div class="avatar-wrap" ${isOwnProfile ? 'onclick="triggerAvatarUpload()"' : ''} title="${isOwnProfile?'Click to change photo':''}">
+      <div class="avatar-wrap" ${isOwnProfile ? 'role="button" tabindex="0" aria-label="Change avatar photo" onclick="triggerAvatarUpload()"' : ''} title="${isOwnProfile?'Click to change photo':''}">
         <div class="avatar" id="heroAvatar" style="${borderStyle}">${avatarHTML}</div>
         ${isOwnProfile ? '<div class="avatar-edit">✏️</div><input type="file" id="avatarInput" accept="image/*"/>' : ''}
       </div>
@@ -306,8 +320,8 @@ function render(data) {
         <span class="vip-badge vip-${tp.tier.name}">${tp.tier.name}</span>
       </div>
       <div style="text-align:right">
-        <div class="hero-balance-label">Balance</div>
-        <div class="hero-balance">$${(data.balance||0).toLocaleString()}</div>
+        <div class="hero-balance-label">Virtual Chip Balance</div>
+        <div class="hero-balance">${(data.balance||0).toLocaleString()} <small style="font-size:13px;letter-spacing:1px;">chips</small></div>
       </div>
     </div>
 
@@ -389,6 +403,12 @@ function render(data) {
   if (isOwnProfile) {
     const inp = document.getElementById('avatarInput');
     if (inp) inp.addEventListener('change', handleAvatarChange);
+    const avatar=document.querySelector('.avatar-wrap[role="button"]');
+    if (avatar) avatar.addEventListener('keydown',event=>{
+      if(event.key==='Enter'||event.key===' '){
+        event.preventDefault();triggerAvatarUpload();
+      }
+    });
   }
 }
 

@@ -207,6 +207,15 @@ The site is already publicly accessible via Vercel. Advertising, sponsorships or
 
 The old `stripe_purchases` database table, if present in an older deployment, is left untouched for archival/retention purposes but is no longer written to or queried by the application. Removing the integration does not revoke old keys or purge Git history; revoke any previously exposed real secrets separately.
 
+## Luxury interior and launch readiness (October 2026)
+
+- Obsidian & Gold design now extends from the marketing page and game tables to the virtual-chip shop, player profiles, leaderboards, tournaments, game history, cosmetics ledger, account sign-in and policy pages.
+- Updated responsive grids, navigable mobile tables, keyboard-operable shop filters, tournament/login tabs, accessible avatar upload, readable focus states and consistent no-cash virtual-chip labels.
+- Improved resilience when cosmetics APIs fail, and avoided overlapping tournament countdown timers and several unsafe string interpolations.
+- Added public-page search metadata, `robots.txt`, `sitemap.xml` and privacy-minded Vercel response headers. Account-only pages explicitly request `noindex`.
+- See **[LAUNCH_CHECKLIST.md](LAUNCH_CHECKLIST.md)** before promoting the website. Automated tests and the Vercel deployment check **do not replace real-device browser QA**.
+- The site remains free-play; launch and ad eligibility depend on platform policies, age restrictions and jurisdiction-specific review. Old credentials in Git history must be revoked separately.
+
 ## License
 
 This project is for educational and portfolio purposes only. Not intended for real gambling.
