@@ -8,7 +8,7 @@
     window.bjBusy = yes;
     document.body.classList.toggle('game-pending', yes);
     document.querySelectorAll('#chipsRow .chip').forEach(chip => {
-      if (yes) chip.classList.add('disabled');
+      if (yes) { chip.classList.add('disabled'); chip.disabled = true; }
     });
     if(yes) ['dealBtn','hitBtn','standBtn','doubleBtn','splitBtn']
       .forEach(id => {const el=document.getElementById(id);if(el)el.disabled=true;});
