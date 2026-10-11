@@ -1120,7 +1120,8 @@ app.get('/api/leaderboard/season',async(req,res)=>{
 const tables = new Map(), socketToTable = new Map(), socketToUser = new Map();
 const SUITS=['♠','♥','♦','♣'], RANKS=['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
 
-function buildShoe(n=6){ const s=[]; for(let d=0;d<n;d++) for(const su of SUITS) for(const r of RANKS) s.push({rank:r,suit:su}); for(let i=s.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[s[i],s[j]]=[s[j],s[i]];} return s; }
+// Cryptographic shuffle matches solo-game fairness without changing card odds.
+function buildShoe(n=6){ const s=[]; for(let d=0;d<n;d++) for(const su of SUITS) for(const r of RANKS) s.push({rank:r,suit:su}); for(let i=s.length-1;i>0;i--){const j=crypto.randomInt(i+1);[s[i],s[j]]=[s[j],s[i]];} return s; }
 function cardValue(r){ if(['J','Q','K'].includes(r)) return 10; if(r==='A') return 11; return parseInt(r); }
 function handTotal(cards){ let t=0,a=0; for(const c of cards){t+=cardValue(c.rank);if(c.rank==='A')a++;} while(t>21&&a>0){t-=10;a--;} return t; }
 function drawCard(shoe){ if(shoe.length<52){const f=buildShoe();shoe.push(...f);} return shoe.pop(); }
