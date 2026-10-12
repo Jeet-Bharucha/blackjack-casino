@@ -120,3 +120,18 @@ test('response headers protect privacy without breaking legacy inline scripts',(
   const freeplay=read('backend/server.js');
   assert.doesNotMatch(freeplay,/require\('stripe'\)|\/api\/buy-coins|\/api\/subscribe/);
 });
+
+test('homepage final call to action stays visible above its opaque background overlay',()=>{
+  const html=read('index.html');
+  const sharedCSS=read('luxury-theme.css');
+  // Without an explicit stacking order, the absolutely positioned ::before
+  // pseudo-element paints over the non-positioned title and buttons.
+  assert.match(html,/\.footer-cta::before\s*\{[^}]*z-index:\s*0/s);
+  assert.match(html,/\.footer-cta\s*>\s*\*\s*\{[^}]*position:\s*relative;\s*z-index:\s*1/s);
+  assert.match(sharedCSS,/\.luxury-front \.footer-cta::before\s*\{/);
+  const section=html.slice(html.indexOf('<section class="footer-cta">'),html.indexOf('</section>',html.indexOf('<section class="footer-cta">')));
+  assert.match(section,/Ready to Play\?/);
+  assert.match(section,/500 Free Chips/);
+  assert.match(section,/Create Free Account/);
+  assert.match(section,/Sign In/);
+});
